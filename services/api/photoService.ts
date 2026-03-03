@@ -2,6 +2,35 @@ import { supabase } from '../supabaseClient';
 import type { TablesInsert, TablesUpdate } from '../../database.types';
 import type { Photo } from '../../types';
 
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Extrai o path relativo dentro do bucket 'photos' a partir de uma URL pública.
+ * Ex: "https://xxx.supabase.co/storage/v1/object/public/photos/uid/file.jpg"
+ *     → "uid/file.jpg"
+ * Retorna null se a URL não for de Storage (ex.: data: URL ou URL externa).
+ */
+const extractStoragePath = (url: string | null | undefined): string | null => {
+    if (!url || url.startsWith('data:')) return null;
+    const match = url.match(/\/storage\/v1\/object\/public\/photos\/(.+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+};
+
+/**
+ * Remove arquivos do bucket 'photos'. Erros são logados mas não lançados,
+ * para não bloquear a operação principal (ex.: deleção do registro do banco).
+ * Exportado para uso no Photos.tsx ao substituir arquivos em edição.
+ */
+export const deletePhotoStorageFiles = async (urls: (string | null | undefined)[]): Promise<void> => {
+    const paths = urls.map(extractStoragePath).filter((p): p is string => p !== null);
+    // Remove duplicatas (ex.: url === thumbnailUrl em modo vídeo)
+    const unique = [...new Set(paths)];
+    if (unique.length === 0) return;
+
+    const { error } = await supabase.storage.from('photos').remove(unique);
+    if (error) console.error('[Storage] Falha ao remover arquivos:', unique, error);
+};
+
 // Inline types for Supabase join results
 // Supabase can return joined relations as an object or a single-item array depending on schema/version
 type PhotoTagRow = { tag_id: string };
@@ -226,11 +255,25 @@ export const photoService = {
     },
 
     deletePhoto: async (id: string) => {
+        // 1. Busca as URLs do arquivo antes de deletar o registro
+        //    (após delete, não é mais possível saber quais arquivos remover)
+        const { data: photoData } = await supabase
+            .from('photos')
+            .select('url, thumbnail_url')
+            .eq('id', id)
+            .single();
+
+        // 2. Deleta o registro do banco
         const { error } = await supabase
             .from('photos')
             .delete()
             .eq('id', id);
 
         if (error) throw new Error(`Failed to delete photo: ${error.message}`);
+
+        // 3. Remove os arquivos físicos do Storage (após confirmar o delete no banco)
+        if (photoData) {
+            await deletePhotoStorageFiles([photoData.url, photoData.thumbnail_url]);
+        }
     }
 };
