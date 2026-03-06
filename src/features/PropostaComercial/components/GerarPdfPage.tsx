@@ -137,15 +137,10 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         // Página 1 (menor número) é sempre a capa
         const capaConfig = cfg[0] ?? null;
 
-        // Interior = primeira página após a capa que tem slot de imagem
-        // Se nenhuma tiver slot de imagem, usa a segunda página
-        const interiorConfig = cfg.slice(1).find(p =>
-            p.slots?.some((s: SlotElemento) => s.tipo === 'imagem')
-        ) ?? cfg[1] ?? null;
+        // Todas as outras páginas viram "outrasPaginas", o laço dinâmico decidirá como renderizar
+        const outrasPaginas = cfg.slice(1);
 
-        const outrasPaginas = cfg.filter(p => p !== capaConfig && p !== interiorConfig);
-
-        return { capaConfig, interiorConfig, outrasPaginas };
+        return { capaConfig, outrasPaginas };
     }
 
     // ── Geração ───────────────────────────────────────────────────────────────
@@ -161,15 +156,19 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             const W = 297, H = 210;
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-            const { capaConfig, interiorConfig, outrasPaginas } = identificarPaginas(mascara);
+            const { capaConfig, outrasPaginas } = identificarPaginas(mascara);
 
             // ── Renders (Conversão Local para Blob URL) ───────────────────────
 
             let renderUrls: string[] = [];
+
+            // Ordena os arquivos locais pelo nome antes de processar, para garantir que "01", "02", etc., sigam a ordem.
+            const sortedArquivosLocais = [...arquivosLocais].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
             if (proposta) {
                 if (proposta.dados?.renders?.length) {
                     for (const renderName of proposta.dados.renders) {
-                        const localFile = arquivosLocais.find(f => f.name === renderName);
+                        const localFile = sortedArquivosLocais.find(f => f.name === renderName);
                         if (localFile) {
                             renderUrls.push(URL.createObjectURL(localFile));
                         } else {
@@ -518,77 +517,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 pageIndex++;
             }
 
-            // ── Páginas Interiores (1 por render) ─────────────────────────────
-
-            if (interiorConfig) {
-                const bd = interiorConfig.backdrop_id
-                    ? backdrops.find(b => b.id === interiorConfig.backdrop_id) ?? null
-                    : null;
-
-                // renderSlot: apenas slots imagem que estão em mode='script' (não campo/texto)
-                const renderSlot = (interiorConfig.slots ?? []).find(
-                    (s: SlotElemento) => {
-                        if (s.tipo !== 'imagem') return false;
-                        const def = slotDefaults[s.id];
-                        const m = def?.mode ?? 'script';
-                        return m === 'script';
-                    }
-                ) ?? null;
-
-                // textSlots: todos os não-imagem + imagem que estão em field/text mode
-                const textSlots = (interiorConfig.slots ?? []).filter(
-                    (s: SlotElemento) => {
-                        if (s.tipo !== 'imagem') return true;
-                        const def = slotDefaults[s.id];
-                        const m = def?.mode ?? 'script';
-                        return m === 'field' || m === 'text';
-                    }
-                );
-
-                const total = renderUrls.length || 1;
-
-                for (let ri = 0; ri < total; ri++) {
-                    setProgress(`Gerando interior ${ri + 1}/${total}...`);
-                    if (pageIndex > 0) doc.addPage();
-
-                    if (bd) {
-                        await adicionarFundo(doc, bd, W, H);
-                    } else {
-                        doc.setFillColor(252, 252, 252);
-                        doc.rect(0, 0, W, H, 'F');
-                    }
-
-                    if (renderSlot && renderUrls[ri]) {
-                        try {
-                            const { data, format } = await fetchBase64(renderUrls[ri]);
-                            doc.addImage(
-                                data, format,
-                                renderSlot.x_mm, renderSlot.y_mm,
-                                renderSlot.w_mm, renderSlot.h_mm,
-                            );
-                        } catch (imgErr) {
-                            console.warn(`Render ${ri + 1} não carregado:`, imgErr);
-                        }
-                    }
-
-                    renderizarTextos(textSlots, interiorTexts, false, buildFontSizeMap(interiorConfig));
-
-                    // -- MODO DEBUG: Slot de Imagem --
-                    if (debugMode && renderSlot) {
-                        doc.setDrawColor(255, 0, 255);
-                        doc.setLineWidth(0.1);
-                        doc.rect(renderSlot.x_mm, renderSlot.y_mm, renderSlot.w_mm, renderSlot.h_mm, 'S');
-
-                        doc.setFontSize(8);
-                        doc.setTextColor(255, 0, 255);
-                        doc.text(`[IMAGEM: ${renderSlot.nome}]`, renderSlot.x_mm + 2, renderSlot.y_mm + 5);
-                    }
-
-                    pageIndex++;
-                }
-            }
-
-            // ── Outras páginas ────────────────────────────────────────────────
+            // ── Todas as Páginas Subsequentes (Generalizado) ──────────────────
 
             for (const outra of outrasPaginas) {
                 // Prepara fundos e mapas de fontes
@@ -598,24 +527,65 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const textMap = buildTextMap(outra);
                 const fsMap = buildFontSizeMap(outra);
 
-                // Controle do Script 01 (transbordamento de linhas)
-                let remainingLines: string[] | undefined = undefined;
+                // Verifica se esta página contém um Slot configurado para injetar os renders
+                const renderSlot = (outra.slots ?? []).find(s => {
+                    const def = slotDefaults[s.id];
+                    return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+                }) ?? null;
 
-                do {
-                    setProgress(`Gerando ${outra.descricao || `página ${outra.pagina}`}...`);
-                    if (pageIndex > 0) doc.addPage();
+                // textSlots: todos os slots exceto o renderSlot encontrado
+                const textSlots = (outra.slots ?? []).filter(s => s.id !== renderSlot?.id);
 
-                    if (bd) {
-                        await adicionarFundo(doc, bd, W, H);
-                    } else {
-                        doc.setFillColor(252, 252, 252);
-                        doc.rect(0, 0, W, H, 'F');
-                    }
+                // Se houver um slot de render, multiplicamos essa página pela qtd de imagens. Senão, 1 vez.
+                const total = renderSlot ? (renderUrls.length || 1) : 1;
 
-                    // Renderiza e captura sobras (se existirem, remainingLines será um array, vazio ou cheio)
-                    remainingLines = renderizarTextos(outra.slots ?? [], textMap, false, fsMap, remainingLines);
-                    pageIndex++;
-                } while (remainingLines && remainingLines.length > 0);
+                for (let ri = 0; ri < total; ri++) {
+                    // Controle do Script 01 (transbordamento de linhas em um slot tabular longo)
+                    let remainingLines: string[] | undefined = undefined;
+
+                    do {
+                        setProgress(`Gerando ${outra.descricao || `página ${outra.pagina}`}${total > 1 ? ` (${ri + 1}/${total})` : ''}...`);
+                        if (pageIndex > 0) doc.addPage();
+
+                        if (bd) {
+                            await adicionarFundo(doc, bd, W, H);
+                        } else {
+                            doc.setFillColor(252, 252, 252);
+                            doc.rect(0, 0, W, H, 'F');
+                        }
+
+                        // Se existe o slot de Render e estamos apenas na "primeira folha do transbordo", injetamos a imagem.
+                        // Obs: Evitamos re-pintar a foto de render se esta for uma página extra (transbordo do script 01)
+                        if (renderSlot && renderUrls[ri] && !remainingLines) {
+                            try {
+                                const { data, format } = await fetchBase64(renderUrls[ri]);
+                                doc.addImage(
+                                    data, format,
+                                    renderSlot.x_mm, renderSlot.y_mm,
+                                    renderSlot.w_mm, renderSlot.h_mm,
+                                );
+                            } catch (imgErr) {
+                                console.warn(`Render ${ri + 1} não carregado:`, imgErr);
+                            }
+
+                            // -- MODO DEBUG: Slot de Imagem --
+                            if (debugMode) {
+                                doc.setDrawColor(255, 0, 255);
+                                doc.setLineWidth(0.1);
+                                doc.rect(renderSlot.x_mm, renderSlot.y_mm, renderSlot.w_mm, renderSlot.h_mm, 'S');
+
+                                doc.setFontSize(8);
+                                doc.setTextColor(255, 0, 255);
+                                doc.text(`[IMAGEM: ${renderSlot.nome}]`, renderSlot.x_mm + 2, renderSlot.y_mm + 5);
+                            }
+                        }
+
+                        // Renderiza os textos e captura sobras do script 01 (se existirem)
+                        remainingLines = renderizarTextos(textSlots, textMap, false, fsMap, remainingLines);
+                        pageIndex++;
+
+                    } while (remainingLines && remainingLines.length > 0);
+                }
             }
 
             // Libera a memória das URLs temporárias geradas localmente
