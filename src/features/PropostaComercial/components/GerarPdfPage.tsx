@@ -356,12 +356,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         doc.setFontSize(defaultSize - 1); // ligeiramente menor que o título
                         doc.setFont(configFontFamily, 'normal');
 
-                        const parts = line.split('\t').map(p => p.trim());
+                        let parts = line.split('\t').map(p => p.trim());
 
-                        // partes[0] = ID (ex: 2.1)
-                        // partes[1] = Qtd (ex: 4)
-                        // partes[2] = Unid (ex: Unid.)
-                        // partes[3] = Descrição (ex: Cadeira Amanda)
+                        // Heurística para linhas sem ID (ex: "100 \t m2 \t Revestimento...")
+                        // Se tem apenas 3 partes, ou se a primeira palavra não tem um ponto separador (ex '1.1') e a segunda parte parece uma unidade de medida..
+                        if (parts.length === 3 || (parts.length > 1 && !parts[0].includes('.') && isNaN(Number(parts[0].replace(',', '.'))) === false)) {
+                            // Empurra as colunas pra direita: [vazio, Qtd, Unid, Descrição]
+                            parts = ['', parts[0], parts[1], parts.slice(2).join(' ')];
+                        }
 
                         // ID (left)
                         if (parts[0]) doc.text(parts[0], X_START, currentY + lineHeight);
