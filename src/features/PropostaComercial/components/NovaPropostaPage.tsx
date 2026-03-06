@@ -737,7 +737,10 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                             const pd = pages[pi];
                             if (!pd) return null;
 
-                            const isInterior = pagina.slots?.some((s: SlotElemento) => s.tipo === 'imagem');
+                            const isRenderUrl = pagina.slots?.some((s: SlotElemento) => {
+                                const def = slotDefaults[s.id];
+                                return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+                            });
 
                             const allSlots = pagina.slots ?? [];
                             const textSlots = allSlots.filter((s: SlotElemento) => s.tipo === 'texto');
@@ -747,12 +750,12 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
 
                             return (
                                 <div key={pi} className="border border-gray-200 rounded-lg overflow-hidden">
-                                    <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-500">
-                                        <span className="w-6 h-6 bg-white text-orange-600 rounded-full text-xs font-bold flex items-center justify-center shrink-0">
+                                    <div className={`flex items-center gap-3 px-4 py-2.5 ${isRenderUrl ? 'bg-blue-600' : 'bg-orange-500'}`}>
+                                        <span className={`w-6 h-6 bg-white rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${isRenderUrl ? 'text-blue-600' : 'text-orange-600'}`}>
                                             {pagina.pagina}
                                         </span>
                                         <span className="text-sm font-semibold text-white flex-1 truncate">
-                                            {`Página ${pagina.pagina}${pagina.descricao ? ' · ' + pagina.descricao : ''}${isInterior ? ' · render' : ''}`}
+                                            {`Página ${pagina.pagina}${pagina.descricao ? ' · ' + pagina.descricao : ''}${isRenderUrl ? ' · Slot de Renders' : ''}`}
                                         </span>
                                         {bd ? (
                                             <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-medium shrink-0">
