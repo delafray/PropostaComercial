@@ -265,6 +265,9 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
                             map[slot.nome] = `${meses[agora.getMonth()]} | ${agora.getFullYear()}`;
                         }
+                        if (slotDef?.scriptName === 'descritivo') {
+                            map[slot.nome] = proposta?.dados?.memorial ?? '';
+                        }
                         continue;
                     }
 
@@ -315,6 +318,11 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 for (const slot of slots) {
                     const text = nameToValue[slot.nome] ?? '';
                     if (!text) continue;
+
+                    if (slotDef?.scriptName === 'descritivo') {
+                        renderDescritivo(text, slot, fontSizeMap[slot.id]);
+                        continue;
+                    }
 
                     // Cor: config default > slot definition
                     const configColor = slotDefaults[slot.id]?.color;
@@ -368,6 +376,50 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         doc.setTextColor(255, 0, 255);
                         doc.text(`[${slot.nome}]`, slot.x_mm, slot.y_mm - 1);
                     }
+                }
+            }
+
+            function renderDescritivo(content: string, slot: SlotElemento, customSize?: number) {
+                const lines = content.split('\n');
+                let currentY = slot.y_mm;
+                const fontSize = customSize ?? 10;
+                const lineHeight = (fontSize * 0.3527) * 1.2; // mm
+
+                doc.setFontSize(fontSize);
+                const configColor = slotDefaults[slot.id]?.color;
+                const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
+                doc.setTextColor(r, g, b);
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+
+                    // Detecta se é categoria (sem tabulação inicial e sem ID numérico no início)
+                    const isCategory = line.trim() && !/^\d+(\.\d+)?\t/.test(line) && !line.startsWith('\t');
+
+                    if (isCategory) {
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(line.trim(), slot.x_mm, currentY + (lineHeight * 0.8));
+                    } else {
+                        doc.setFont('helvetica', 'normal');
+                        // Tenta quebrar em colunas (ID \t Quantidade \t Unidade \t Descrição)
+                        const parts = line.split('\t').map(p => p.trim());
+                        if (parts.length >= 4) {
+                            const [id, qty, unit, ...descParts] = parts;
+                            const desc = descParts.join(' ');
+
+                            doc.text(id, slot.x_mm, currentY + (lineHeight * 0.8));
+                            doc.text(qty, slot.x_mm + 10, currentY + (lineHeight * 0.8));
+                            doc.text(unit, slot.x_mm + 25, currentY + (lineHeight * 0.8));
+                            doc.text(desc, slot.x_mm + 40, currentY + (lineHeight * 0.8));
+                        } else {
+                            // Fallback caso não esteja tabulado perfeitamente
+                            doc.text(line.trim(), slot.x_mm + 5, currentY + (lineHeight * 0.8));
+                        }
+                    }
+
+                    currentY += lineHeight;
+                    // Proteção contra estouro do container (opcional, jsPDF não quebra página automático aqui)
+                    if (currentY > slot.y_mm + slot.h_mm) break;
                 }
             }
 

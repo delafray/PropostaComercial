@@ -83,6 +83,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Mês e Ano',
         description: 'Insere o mês e o ano atual (padrão: MÊS | ANO).',
     },
+    {
+        name: 'descritivo',
+        label: 'Descritivo Técnico',
+        description: 'Renderiza o memorial descritivo (.txt) com categorias em negrito e colunas tabuladas.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
