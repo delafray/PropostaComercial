@@ -737,8 +737,6 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                             const pd = pages[pi];
                             if (!pd) return null;
 
-                            const isInterior = pagina.slots?.some((s: SlotElemento) => s.tipo === 'imagem');
-
                             const allSlots = pagina.slots ?? [];
                             const textSlots = allSlots.filter((s: SlotElemento) => s.tipo === 'texto');
                             if (allSlots.length === 0) return null;
@@ -752,7 +750,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                             {pagina.pagina}
                                         </span>
                                         <span className="text-sm font-semibold text-white flex-1 truncate">
-                                            {`Página ${pagina.pagina}${pagina.descricao ? ' · ' + pagina.descricao : ''}${isInterior ? ' · render' : ''}`}
+                                            {`Página ${pagina.pagina}${pagina.descricao ? ' · ' + pagina.descricao : ''}`}
                                         </span>
                                         {bd ? (
                                             <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-medium shrink-0">

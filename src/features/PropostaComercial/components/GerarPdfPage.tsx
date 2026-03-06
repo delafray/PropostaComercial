@@ -128,25 +128,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         }
     }
 
-    // ── Identificação dos tipos de página na máscara ──────────────────────────
-
-    function identificarPaginas(mc: TemplateMascara) {
-        // Ordena pelo número de página para garantir sequência correta
-        const cfg = [...(mc.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
-
-        // Página 1 (menor número) é sempre a capa
-        const capaConfig = cfg[0] ?? null;
-
-        // Interior = primeira página após a capa que tem slot de imagem
-        // Se nenhuma tiver slot de imagem, usa a segunda página
-        const interiorConfig = cfg.slice(1).find(p =>
-            p.slots?.some((s: SlotElemento) => s.tipo === 'imagem')
-        ) ?? cfg[1] ?? null;
-
-        const outrasPaginas = cfg.filter(p => p !== capaConfig && p !== interiorConfig);
-
-        return { capaConfig, interiorConfig, outrasPaginas };
-    }
 
     // ── Geração ───────────────────────────────────────────────────────────────
 
@@ -161,7 +142,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             const W = 297, H = 210;
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-            const { capaConfig, interiorConfig, outrasPaginas } = identificarPaginas(mascara);
+            // Ordena as páginas da máscara
+            const paginasConfig = [...(mascara.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
 
             // ── Renders (Conversão Local para Blob URL) ───────────────────────
 
@@ -320,8 +302,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 return map;
             }
 
-            const capaTexts = buildTextMap(capaConfig);
-            const interiorTexts = buildTextMap(interiorConfig);
 
             // ── Função auxiliar Script 01 (Descritivo Tabulado) ───────────────
 
@@ -497,125 +477,63 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             let pageIndex = 0;
 
-            // ── Página 1: Capa ────────────────────────────────────────────────
 
-            if (capaConfig) {
-                setProgress('Gerando capa...');
-                if (pageIndex > 0) doc.addPage();
+            // ── Loop Unificado de Páginas ──────────────────────────────────────
 
-                const bd = capaConfig.backdrop_id
-                    ? backdrops.find(b => b.id === capaConfig.backdrop_id) ?? null
+            for (const cfgPagina of paginasConfig) {
+                const bd = cfgPagina.backdrop_id
+                    ? backdrops.find(b => b.id === cfgPagina.backdrop_id) ?? null
                     : null;
 
-                if (bd) {
-                    await adicionarFundo(doc, bd, W, H);
-                } else {
-                    doc.setFillColor(252, 252, 252);
-                    doc.rect(0, 0, W, H, 'F');
-                }
+                const textMap = buildTextMap(cfgPagina);
+                const fsMap = buildFontSizeMap(cfgPagina);
+                const isCapa = cfgPagina.pagina === 1 || cfgPagina.descricao?.toLowerCase().includes('capa');
 
-                renderizarTextos(capaConfig.slots ?? [], capaTexts, true, buildFontSizeMap(capaConfig));
-                pageIndex++;
-            }
+                // Detecta se esta página possui o script 'render'
+                const renderSlot = (cfgPagina.slots ?? []).find(s => {
+                    const def = slotDefaults[s.id];
+                    return s.tipo === 'imagem' && def?.mode === 'script' && def?.scriptName === 'render';
+                });
 
-            // ── Páginas Interiores (1 por render) ─────────────────────────────
+                // Slots de texto e imagens fixas (não-render)
+                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== renderSlot);
 
-            if (interiorConfig) {
-                const bd = interiorConfig.backdrop_id
-                    ? backdrops.find(b => b.id === interiorConfig.backdrop_id) ?? null
-                    : null;
+                // Se for uma página de render, ela pode se repetir conforme o número de imagens
+                const timesToRepeat = renderSlot ? (renderUrls.length || 1) : 1;
 
-                // renderSlot: apenas slots imagem que estão em mode='script' (não campo/texto)
-                const renderSlot = (interiorConfig.slots ?? []).find(
-                    (s: SlotElemento) => {
-                        if (s.tipo !== 'imagem') return false;
-                        const def = slotDefaults[s.id];
-                        const m = def?.mode ?? 'script';
-                        return m === 'script';
-                    }
-                ) ?? null;
-
-                // textSlots: todos os não-imagem + imagem que estão em field/text mode
-                const textSlots = (interiorConfig.slots ?? []).filter(
-                    (s: SlotElemento) => {
-                        if (s.tipo !== 'imagem') return true;
-                        const def = slotDefaults[s.id];
-                        const m = def?.mode ?? 'script';
-                        return m === 'field' || m === 'text';
-                    }
-                );
-
-                const total = renderUrls.length || 1;
-
-                for (let ri = 0; ri < total; ri++) {
-                    setProgress(`Gerando interior ${ri + 1}/${total}...`);
-                    if (pageIndex > 0) doc.addPage();
-
-                    if (bd) {
-                        await adicionarFundo(doc, bd, W, H);
-                    } else {
-                        doc.setFillColor(252, 252, 252);
-                        doc.rect(0, 0, W, H, 'F');
-                    }
-
-                    if (renderSlot && renderUrls[ri]) {
-                        try {
-                            const { data, format } = await fetchBase64(renderUrls[ri]);
-                            doc.addImage(
-                                data, format,
-                                renderSlot.x_mm, renderSlot.y_mm,
-                                renderSlot.w_mm, renderSlot.h_mm,
-                            );
-                        } catch (imgErr) {
-                            console.warn(`Render ${ri + 1} não carregado:`, imgErr);
-                        }
-                    }
-
-                    renderizarTextos(textSlots, interiorTexts, false, buildFontSizeMap(interiorConfig));
-
-                    // -- MODO DEBUG: Slot de Imagem --
-                    if (debugMode && renderSlot) {
-                        doc.setDrawColor(255, 0, 255);
-                        doc.setLineWidth(0.1);
-                        doc.rect(renderSlot.x_mm, renderSlot.y_mm, renderSlot.w_mm, renderSlot.h_mm, 'S');
-
-                        doc.setFontSize(8);
-                        doc.setTextColor(255, 0, 255);
-                        doc.text(`[IMAGEM: ${renderSlot.nome}]`, renderSlot.x_mm + 2, renderSlot.y_mm + 5);
-                    }
-
-                    pageIndex++;
-                }
-            }
-
-            // ── Outras páginas ────────────────────────────────────────────────
-
-            for (const outra of outrasPaginas) {
-                // Prepara fundos e mapas de fontes
-                const bd = outra.backdrop_id
-                    ? backdrops.find(b => b.id === outra.backdrop_id) ?? null
-                    : null;
-                const textMap = buildTextMap(outra);
-                const fsMap = buildFontSizeMap(outra);
-
-                // Controle do Script 01 (transbordamento de linhas)
                 let remainingLines: string[] | undefined = undefined;
 
-                do {
-                    setProgress(`Gerando ${outra.descricao || `página ${outra.pagina}`}...`);
-                    if (pageIndex > 0) doc.addPage();
+                for (let ri = 0; ri < timesToRepeat; ri++) {
+                    do {
+                        setProgress(`Gerando ${cfgPagina.descricao || `Página ${cfgPagina.pagina}`}...`);
+                        if (pageIndex > 0) doc.addPage();
 
-                    if (bd) {
-                        await adicionarFundo(doc, bd, W, H);
-                    } else {
-                        doc.setFillColor(252, 252, 252);
-                        doc.rect(0, 0, W, H, 'F');
-                    }
+                        if (bd) {
+                            await adicionarFundo(doc, bd, W, H);
+                        } else {
+                            doc.setFillColor(252, 252, 252);
+                            doc.rect(0, 0, W, H, 'F');
+                        }
 
-                    // Renderiza e captura sobras (se existirem, remainingLines será um array, vazio ou cheio)
-                    remainingLines = renderizarTextos(outra.slots ?? [], textMap, false, fsMap, remainingLines);
-                    pageIndex++;
-                } while (remainingLines && remainingLines.length > 0);
+                        // Se tiver slot de render, insere a imagem da vez
+                        if (renderSlot && renderUrls[ri]) {
+                            try {
+                                const { data, format } = await fetchBase64(renderUrls[ri]);
+                                doc.addImage(
+                                    data, format,
+                                    renderSlot.x_mm, renderSlot.y_mm,
+                                    renderSlot.w_mm, renderSlot.h_mm,
+                                );
+                            } catch (imgErr) {
+                                console.warn(`Render ${ri + 1} não carregado:`, imgErr);
+                            }
+                        }
+
+                        // Renderiza textos e sobras
+                        remainingLines = renderizarTextos(otherSlots, textMap, isCapa, fsMap, remainingLines);
+                        pageIndex++;
+                    } while (remainingLines && remainingLines.length > 0);
+                }
             }
 
             // Libera a memória das URLs temporárias geradas localmente
@@ -654,17 +572,23 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         );
     }
 
-    const { capaConfig, interiorConfig, outrasPaginas } = identificarPaginas(mascara);
+    const paginasConfig = [...(mascara.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
 
-    // Conta renders enviados ao banco; se ainda não enviados, infere pelos nomes de arquivo da pasta
+    // Conta renders
     const rendersSalvos = proposta?.dados?.renders?.length ?? 0;
     const rendersNaPasta = (proposta?.dados?.pasta?.arquivos ?? [])
         .filter((f: string) => /^\d+\.(jpg|jpeg|png)$/i.test(f)).length;
     const renderCount = rendersSalvos > 0 ? rendersSalvos : rendersNaPasta;
 
-    const totalPages = (capaConfig ? 1 : 0)
-        + (interiorConfig ? (renderCount || 1) : 0)
-        + outrasPaginas.length;
+    // Cálculo dinâmico do total de páginas considerando as repetições de render
+    let totalPages = 0;
+    for (const p of paginasConfig) {
+        const hasRender = p.slots?.some(s => {
+            const def = slotDefaults[s.id];
+            return s.tipo === 'imagem' && def?.mode === 'script' && def?.scriptName === 'render';
+        });
+        totalPages += hasRender ? (renderCount || 1) : 1;
+    }
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -748,52 +672,28 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 </h2>
                 <div className="space-y-2">
 
-                    {capaConfig && (() => {
-                        const bd = capaConfig.backdrop_id ? backdrops.find(b => b.id === capaConfig.backdrop_id) : null;
-                        return (
-                            <div className="flex items-center gap-3 p-3 border border-gray-100 rounded-lg bg-gray-50/50">
-                                <span className="w-7 h-7 bg-orange-100 text-orange-600 rounded-full text-xs font-bold flex items-center justify-center shrink-0">1</span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-700">Capa</p>
-                                    <p className="text-[11px] text-gray-400">{capaConfig.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto</p>
-                                </div>
-                                <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
-                                    {bd ? `${bd.nome} · ${bd.tipo_arquivo}` : 'Sem fundo ⚠'}
-                                </span>
-                            </div>
-                        );
-                    })()}
+                    {paginasConfig.map((p, i) => {
+                        const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
+                        const hasRender = p.slots?.some(s => {
+                            const def = slotDefaults[s.id];
+                            return s.tipo === 'imagem' && def?.mode === 'script' && def?.scriptName === 'render';
+                        });
+                        const n = hasRender ? (renderCount || 1) : 1;
 
-                    {interiorConfig && (() => {
-                        const bd = interiorConfig.backdrop_id ? backdrops.find(b => b.id === interiorConfig.backdrop_id) : null;
-                        const n = renderCount || 1;
                         return (
-                            <div className="flex items-center gap-3 p-3 border border-blue-100 rounded-lg bg-blue-50/40">
-                                <span className="w-7 h-7 bg-blue-100 text-blue-600 rounded-full text-xs font-bold flex items-center justify-center shrink-0">
-                                    {n > 1 ? `×${n}` : '2'}
+                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasRender ? 'border-blue-100 bg-blue-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
+                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasRender ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                    {p.pagina}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-700">
-                                        Interior{n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
+                                        {p.descricao || `Página ${p.pagina}`}
+                                        {hasRender && n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
                                     </p>
-                                    <p className="text-[11px] text-gray-400">{interiorConfig.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto + render</p>
-                                </div>
-                                <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
-                                    {bd ? `${bd.nome} · ${bd.tipo_arquivo}` : 'Sem fundo ⚠'}
-                                </span>
-                            </div>
-                        );
-                    })()}
-
-                    {outrasPaginas.map((p, i) => {
-                        const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
-                        const pageNum = 1 + (interiorConfig ? (renderCount || 1) : 0) + i + 1;
-                        return (
-                            <div key={i} className="flex items-center gap-3 p-3 border border-gray-100 rounded-lg bg-gray-50/50">
-                                <span className="w-7 h-7 bg-orange-100 text-orange-600 rounded-full text-xs font-bold flex items-center justify-center shrink-0">{pageNum}</span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-700">{p.descricao || `Página ${p.pagina}`}</p>
-                                    <p className="text-[11px] text-gray-400">{p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto</p>
+                                    <p className="text-[11px] text-gray-400">
+                                        {p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto
+                                        {hasRender && ' + slot render'}
+                                    </p>
                                 </div>
                                 <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
                                     {bd ? `${bd.nome} · ${bd.tipo_arquivo}` : 'Sem fundo ⚠'}

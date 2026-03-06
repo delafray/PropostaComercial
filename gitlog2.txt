@@ -1,0 +1,15 @@
+﻿5bbfaa2 fix(pdf): handle local File objects correctly in jsPDF via FileReader to fix blank render slots
+b99091c fix(renders): decouple render logic from faulty image slot heuristics to prevent jpg injection on text fields
+15ebc39 fix(GerarPdfPage): remove interiorConfig reference breaking PDF generation
+60a0d10 style(NovaPropostaPage): remove hardcoded interior strings from page structure UI
+a8ff259 refactor(GerarPdfPage): generalize render script logic across all pages
+a14afc7 chore: backup point before new scripts
+5f4d70c feat(GerarPdfPage): auto-pagination logic for overflowing script 01 bounds
+3f2df5e fix(GerarPdfPage): heuristic for missing ID in script 01 tabular render
+4db0603 fix(GerarPdfPage): decrease line-height and fix overlap in script 01 rendering
+83a17c2 fix(GerarPdfPage): map memorial text to script 01 in buildTextMap
+d22ff36 feat: implement script 01 (descritivo) with tabular layout and bold categories
+b211277 fix: prioritize slotDefaults font size over auto-saved proposal font sizes
+9d81673 fix: resolve ReferenceError in NovaPropostaPage by defining isScriptMode and fieldLabel
+6ba9175 fix: revert descritivo script that caused white screen crash
+1b7a44b fix: resolve white screen crash by defining slotDef in renderizarTextos loop
