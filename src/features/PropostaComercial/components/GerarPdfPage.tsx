@@ -300,8 +300,19 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 for (const slot of pageConfig.slots ?? []) {
                     const fromProposta = pg?.fontSizes?.[slot.id];
                     const fromConfig = slotDefaults[slot.id]?.fontSize;
-                    if (fromProposta !== undefined) map[slot.id] = fromProposta;
-                    else if (fromConfig !== undefined) map[slot.id] = fromConfig;
+
+                    if (fromProposta !== undefined) {
+                        // Heurística de limpeza: se o valor salvo for exatamente o fallback padrão original do template
+                        // e houver uma configuração global ativa, assumimos que o valor salvo foi um auto-save indesejado.
+                        const fallbackSize = slot.font_size ?? 12;
+                        if (fromProposta === fallbackSize && fromConfig !== undefined) {
+                            map[slot.id] = fromConfig;
+                        } else {
+                            map[slot.id] = fromProposta;
+                        }
+                    } else if (fromConfig !== undefined) {
+                        map[slot.id] = fromConfig;
+                    }
                 }
                 return map;
             }
