@@ -64,9 +64,9 @@ export const FIELD_OPTIONS = [
 // Scripts disponíveis (comportamentos nomeados)
 export const SCRIPT_OPTIONS = [
     {
-        name: 'render',
-        label: 'Render',
-        description: 'Insere a imagem do render neste slot. Com múltiplos renders, gera uma página por render.',
+        name: 'projeto',
+        label: 'Projeto (Renders)',
+        description: 'Insere as imagens de render do projeto neste slot. Ordena pelo nome (menor número primeiro) e gera uma página por render.',
     },
     {
         name: 'hoje',
@@ -115,7 +115,7 @@ export default function ConfiguracaoPage() {
                 for (const pagina of mc.paginas_config) {
                     for (const slot of pagina.slots ?? []) {
                         const ex = savedDefaults[slot.id];
-                        const defaultMode: SlotMode = ex?.mode ?? (slot.tipo === 'imagem' ? 'script' : 'text');
+                        const defaultMode: SlotMode = ex?.mode ?? 'text';
                         init[slot.id] = {
                             value: ex?.value ?? '',
                             fontSize: ex?.fontSize ?? slot.font_size ?? 12,
@@ -125,7 +125,7 @@ export default function ConfiguracaoPage() {
                             align: ex?.align ?? (slot.align as any) ?? 'left',
                             mode: defaultMode,
                             fieldKey: ex?.fieldKey ?? FIELD_OPTIONS[0].key,
-                            scriptName: ex?.scriptName ?? (slot.tipo === 'imagem' ? 'render' : SCRIPT_OPTIONS[0].name),
+                            scriptName: ex?.scriptName ?? SCRIPT_OPTIONS[0].name,
                         };
                     }
                 }
@@ -235,12 +235,12 @@ export default function ConfiguracaoPage() {
                                         value: '', fontSize: slot.font_size ?? 12,
                                         color: slot.color ?? '#000000', fontFamily: 'helvetica',
                                         fontStyle: slot.font_style ?? 'normal', align: slot.align ?? 'left',
-                                        mode: slot.tipo === 'imagem' ? 'script' : 'text',
+                                        mode: 'text',
                                         fieldKey: FIELD_OPTIONS[0].key, scriptName: SCRIPT_OPTIONS[0].name,
                                     };
                                     const mode = def.mode ?? 'text';
                                     const isImagem = slot.tipo === 'imagem';
-                                    const showStyle = mode !== 'script' || (mode === 'script' && def.scriptName !== 'render');
+                                    const showStyle = mode !== 'script' || (mode === 'script' && def.scriptName !== 'projeto');
 
                                     return (
                                         <div key={slot.id} className="px-4 py-3">

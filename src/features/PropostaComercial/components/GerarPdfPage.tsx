@@ -145,27 +145,37 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             // Ordena as páginas da máscara
             const paginasConfig = [...(mascara.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
 
-            // ── Renders (Conversão Local para Blob URL) ───────────────────────
+            // ── Renders (busca local, ordenados pelo nome crescente) ─────────
 
             let renderUrls: string[] = [];
             if (proposta) {
-                if (proposta.dados?.renders?.length) {
-                    for (const renderName of proposta.dados.renders) {
-                        const localFile = arquivosLocais.find(f => f.name === renderName);
+                const renderNames: string[] = proposta.dados?.renders ?? [];
+
+                if (renderNames.length > 0) {
+                    // Se a pasta não está carregada, tenta pedir acesso agora
+                    let arquivos = arquivosLocais;
+                    if (arquivos.length === 0 && pastaHandle) {
+                        setProgress('Aguardando acesso à pasta...');
+                        const granted = await pedirPermissao(pastaHandle);
+                        if (granted) {
+                            arquivos = await lerArquivos(pastaHandle);
+                            setArquivosLocais(arquivos);
+                        }
+                    }
+
+                    if (arquivos.length === 0) {
+                        throw new Error('Não foi possível acessar a pasta do projeto. Selecione a pasta novamente na aba Nova Proposta.');
+                    }
+
+                    // Ordena pelo nome crescente (10.jpg < 11.jpg < 12.jpg...)
+                    const sorted = [...renderNames].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+                    for (const renderName of sorted) {
+                        const localFile = arquivos.find(f => f.name === renderName);
                         if (localFile) {
                             renderUrls.push(URL.createObjectURL(localFile));
                         } else {
-                            throw new Error(`A imagem do render "${renderName}" não foi encontrada na pasta local. Conceda acesso à pasta ou verifique se ela existe.`);
-                        }
-                    }
-                } else {
-                    for (const pg of proposta.dados?.paginas ?? []) {
-                        const maskPage = mascara.paginas_config.find(mp => mp.pagina === pg.pagina);
-                        const renderSlot = maskPage?.slots?.find(
-                            (s: SlotElemento) => s.tipo === 'imagem'
-                        );
-                        if (renderSlot && pg.slots[renderSlot.id]) {
-                            renderUrls.push(pg.slots[renderSlot.id]);
+                            throw new Error(`Imagem "${renderName}" não encontrada na pasta local. Verifique se o arquivo existe na pasta selecionada.`);
                         }
                     }
                 }
@@ -229,27 +239,24 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                 for (const slot of pageConfig.slots ?? []) {
                     const slotDef = slotDefaults[slot.id];
-                    const mode = slotDef?.mode ?? (slot.tipo === 'imagem' ? 'script' : 'text');
+                    const mode = slotDef?.mode ?? (slot.tipo === 'texto' ? 'text' : 'text');
 
-                    // Script mode → deixa o mecanismo de render/imagem tratar (exceto scripts de texto como 'hoje')
                     if (mode === 'script') {
                         if (slotDef?.scriptName === 'hoje') {
                             map[slot.nome] = new Date().toLocaleDateString('pt-BR');
-                        }
-                        if (slotDef?.scriptName === 'cliente_evento') {
+                        } else if (slotDef?.scriptName === 'cliente_evento') {
                             const b = proposta?.dados?.briefing;
                             const cli = (b?.cliente ?? '').trim();
                             const eve = (b?.evento ?? '').trim();
                             map[slot.nome] = [cli, eve].filter(Boolean).join(' · ');
-                        }
-                        if (slotDef?.scriptName === 'mes_ano') {
+                        } else if (slotDef?.scriptName === 'mes_ano') {
                             const agora = new Date();
                             const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
                             map[slot.nome] = `${meses[agora.getMonth()]} | ${agora.getFullYear()}`;
-                        }
-                        if (slotDef?.scriptName === '01') {
+                        } else if (slotDef?.scriptName === '01') {
                             map[slot.nome] = proposta?.dados?.memorial ?? '';
                         }
+                        // script 'projeto' é tratado no loop de páginas (imagem), não aqui
                         continue;
                     }
 
@@ -489,23 +496,23 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const fsMap = buildFontSizeMap(cfgPagina);
                 const isCapa = cfgPagina.pagina === 1 || cfgPagina.descricao?.toLowerCase().includes('capa');
 
-                // Detecta se esta página possui o script 'render'
-                const renderSlot = (cfgPagina.slots ?? []).find(s => {
+                // Detecta o slot configurado com o script 'projeto'
+                const projetoSlot = (cfgPagina.slots ?? []).find(s => {
                     const def = slotDefaults[s.id];
-                    return s.tipo === 'imagem' && def?.mode === 'script' && def?.scriptName === 'render';
+                    return def?.mode === 'script' && def?.scriptName === 'projeto';
                 });
 
-                // Slots de texto e imagens fixas (não-render)
-                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== renderSlot);
+                // Todos os outros slots (exceto o de projeto)
+                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot);
 
-                // Se for uma página de render, ela pode se repetir conforme o número de imagens
-                const timesToRepeat = renderSlot ? (renderUrls.length || 1) : 1;
+                // Repete 1 vez por render (se houver slot de projeto), ou 1 vez normal
+                const timesToRepeat = projetoSlot ? Math.max(renderUrls.length, 1) : 1;
 
                 let remainingLines: string[] | undefined = undefined;
 
                 for (let ri = 0; ri < timesToRepeat; ri++) {
                     do {
-                        setProgress(`Gerando ${cfgPagina.descricao || `Página ${cfgPagina.pagina}`}...`);
+                        setProgress(`Gerando ${cfgPagina.descricao || `Página ${cfgPagina.pagina}`}${projetoSlot && timesToRepeat > 1 ? ` (${ri + 1}/${timesToRepeat})` : ''}...`);
                         if (pageIndex > 0) doc.addPage();
 
                         if (bd) {
@@ -515,21 +522,26 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             doc.rect(0, 0, W, H, 'F');
                         }
 
-                        // Se tiver slot de render, insere a imagem da vez
-                        if (renderSlot && renderUrls[ri]) {
+                        // Insere o render no slot de projeto
+                        if (projetoSlot && renderUrls[ri]) {
                             try {
                                 const { data, format } = await fetchBase64(renderUrls[ri]);
                                 doc.addImage(
-                                    data, format,
-                                    renderSlot.x_mm, renderSlot.y_mm,
-                                    renderSlot.w_mm, renderSlot.h_mm,
+                                    data,
+                                    format,
+                                    projetoSlot.x_mm,
+                                    projetoSlot.y_mm,
+                                    projetoSlot.w_mm,
+                                    projetoSlot.h_mm,
+                                    undefined,
+                                    'FAST'
                                 );
                             } catch (imgErr) {
                                 console.warn(`Render ${ri + 1} não carregado:`, imgErr);
                             }
                         }
 
-                        // Renderiza textos e sobras
+                        // Renderiza os outros slots normalmente
                         remainingLines = renderizarTextos(otherSlots, textMap, isCapa, fsMap, remainingLines);
                         pageIndex++;
                     } while (remainingLines && remainingLines.length > 0);
@@ -580,14 +592,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         .filter((f: string) => /^\d+\.(jpg|jpeg|png)$/i.test(f)).length;
     const renderCount = rendersSalvos > 0 ? rendersSalvos : rendersNaPasta;
 
-    // Cálculo dinâmico do total de páginas considerando as repetições de render
+    // Cálculo dinâmico do total de páginas considerando as repetições de projeto
     let totalPages = 0;
     for (const p of paginasConfig) {
-        const hasRender = p.slots?.some(s => {
+        const hasProjeto = p.slots?.some(s => {
             const def = slotDefaults[s.id];
-            return s.tipo === 'imagem' && def?.mode === 'script' && def?.scriptName === 'render';
+            return def?.mode === 'script' && def?.scriptName === 'projeto';
         });
-        totalPages += hasRender ? (renderCount || 1) : 1;
+        totalPages += hasProjeto ? (renderCount || 1) : 1;
     }
 
     return (
@@ -674,25 +686,25 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                     {paginasConfig.map((p, i) => {
                         const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
-                        const hasRender = p.slots?.some(s => {
+                        const hasProjeto = p.slots?.some(s => {
                             const def = slotDefaults[s.id];
-                            return s.tipo === 'imagem' && def?.mode === 'script' && def?.scriptName === 'render';
+                            return def?.mode === 'script' && def?.scriptName === 'projeto';
                         });
-                        const n = hasRender ? (renderCount || 1) : 1;
+                        const n = hasProjeto ? (renderCount || 1) : 1;
 
                         return (
-                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasRender ? 'border-blue-100 bg-blue-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
-                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasRender ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasProjeto ? 'border-blue-100 bg-blue-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
+                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasProjeto ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
                                     {p.pagina}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-700">
                                         {p.descricao || `Página ${p.pagina}`}
-                                        {hasRender && n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
+                                        {hasProjeto && n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
                                     </p>
                                     <p className="text-[11px] text-gray-400">
                                         {p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto
-                                        {hasRender && ' + slot render'}
+                                        {hasProjeto && ' + projeto'}
                                     </p>
                                 </div>
                                 <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
