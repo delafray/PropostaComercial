@@ -112,6 +112,9 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                         const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
                         return [s.id, `${meses[agora.getMonth()]} | ${agora.getFullYear()}`];
                     }
+                    if (def?.mode === 'script' && def?.scriptName === '01' && briefing?._memorialTexto) {
+                        return [s.id, briefing._memorialTexto];
+                    }
                     const val = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';
                     return [s.id, val];
                 })
@@ -149,6 +152,9 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                 const agora = new Date();
                                 const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
                                 return [s.id, `${meses[agora.getMonth()]} | ${agora.getFullYear()}`];
+                            }
+                            if (def?.scriptName === '01') {
+                                return [s.id, prop.dados?.memorial ?? ''];
                             }
                             return [s.id, ''];
                         }

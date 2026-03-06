@@ -320,12 +320,91 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             const capaTexts = buildTextMap(capaConfig);
             const interiorTexts = buildTextMap(interiorConfig);
 
+            // ── Função auxiliar Script 01 (Descritivo Tabulado) ───────────────
+
+            function renderDescritivo01(doc: jsPDF, text: string, slot: SlotElemento, fontSizeMap: Record<string, number> = {}) {
+                const configColor = slotDefaults[slot.id]?.color;
+                const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
+                doc.setTextColor(r, g, b);
+
+                const defaultSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
+                let configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
+                if (configFontFamily === 'century-gothic') configFontFamily = 'helvetica';
+
+                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+                let currentY = slot.y_mm;
+                const lineHeight = defaultSize * 0.45; // mm per line approx
+                const maxY = slot.y_mm + slot.h_mm;
+
+                // Definir larguras/posições das colunas (relativas ao X inicial)
+                const X_START = slot.x_mm;
+                const COL_QTD = X_START + 12;
+                const COL_UNID = X_START + 25;
+                const COL_DESC = X_START + 40;
+
+                for (const line of lines) {
+                    if (currentY > maxY - lineHeight) break; // Não ultrapassar o limite inferior do slot
+
+                    // Checa se a linha tem tabs (indicando que é um item da lista)
+                    if (line.includes('\t')) {
+                        // Linha Normal: Item técnico -> ID \t Qtd \t Unid \t Desc
+                        doc.setFontSize(defaultSize - 1); // ligeiramente menor que o título
+                        doc.setFont(configFontFamily, 'normal');
+
+                        const parts = line.split('\t').map(p => p.trim());
+
+                        // partes[0] = ID (ex: 2.1)
+                        // partes[1] = Qtd (ex: 4)
+                        // partes[2] = Unid (ex: Unid.)
+                        // partes[3] = Descrição (ex: Cadeira Amanda)
+
+                        // ID (left)
+                        if (parts[0]) doc.text(parts[0], X_START, currentY + lineHeight);
+
+                        // Qtd (center)
+                        if (parts[1]) doc.text(parts[1], COL_QTD, currentY + lineHeight, { align: 'center' });
+
+                        // Unid (left)
+                        if (parts[2]) doc.text(parts[2], COL_UNID, currentY + lineHeight);
+
+                        // Desc (left) - Corta se for muito longa
+                        if (parts[3]) {
+                            const maxW = slot.w_mm - (COL_DESC - X_START); // Espaço restante
+                            let desc = parts[3];
+                            // Tentativa simples de elipse se passar do limite visual
+                            // Idealmente usar doc.splitTextToSize, mas manteremos simple.
+                            doc.text(desc, COL_DESC, currentY + lineHeight, { maxWidth: maxW - 2 });
+                        }
+
+                    } else {
+                        // Linha sem tab: É uma Categoria (ex: "Mobiliário")
+                        doc.setFontSize(defaultSize);
+                        doc.setFont(configFontFamily, 'bold');
+
+                        currentY += (lineHeight * 0.5); // extra space before category
+                        if (currentY > maxY - lineHeight) break;
+
+                        doc.text(line, COL_DESC, currentY + lineHeight); // Alinhado com a descrição
+                    }
+
+                    // Avança linha
+                    currentY += lineHeight + 1; // 1mm de espaçamento
+                }
+            }
+
             // ── Renderizar textos ─────────────────────────────────────────────
 
             function renderizarTextos(slots: SlotElemento[], nameToValue: Record<string, string>, isCapa = false, fontSizeMap: Record<string, number> = {}) {
                 for (const slot of slots) {
                     const text = nameToValue[slot.nome] ?? '';
                     if (!text) continue;
+
+                    const slotDef = slotDefaults[slot.id];
+                    if (slotDef?.scriptName === '01') {
+                        renderDescritivo01(doc, text, slot, fontSizeMap);
+                        continue; // Importante: Pula a renderização padrão de texto se for o script 01
+                    }
 
                     // Cor: config default > slot definition
                     const configColor = slotDefaults[slot.id]?.color;
