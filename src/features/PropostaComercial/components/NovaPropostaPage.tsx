@@ -763,6 +763,8 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                             const isAuto = autoFilledIds.has(slot.id);
                                             const slotDef = slotDefaults[slot.id];
                                             const isFieldMode = slotDef?.mode === 'field';
+                                            const isScriptMode = slotDef?.mode === 'script';
+                                            const fieldLabel = isFieldMode ? FIELD_OPTIONS.find((f: any) => f.key === slotDef?.fieldKey)?.label ?? 'Campo' : '';
                                             const showFontSize = !isScriptMode || (isScriptMode && slotDef?.scriptName !== 'render');
 
                                             return (
