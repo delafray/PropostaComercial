@@ -320,7 +320,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             }
 
             const capaTexts = buildTextMap(capaConfig);
-            const interiorTexts = buildTextMap(interiorConfig);
 
             // ── Função auxiliar Script 01 (Descritivo Tabulado) ───────────────
 
@@ -624,7 +623,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         );
     }
 
-    const { capaConfig, interiorConfig, outrasPaginas } = identificarPaginas(mascara);
+    const { capaConfig, outrasPaginas } = identificarPaginas(mascara);
 
     // Conta renders enviados ao banco; se ainda não enviados, infere pelos nomes de arquivo da pasta
     const rendersSalvos = proposta?.dados?.renders?.length ?? 0;
@@ -632,9 +631,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         .filter((f: string) => /^\d+\.(jpg|jpeg|png)$/i.test(f)).length;
     const renderCount = rendersSalvos > 0 ? rendersSalvos : rendersNaPasta;
 
-    const totalPages = (capaConfig ? 1 : 0)
-        + (interiorConfig ? (renderCount || 1) : 0)
-        + outrasPaginas.length;
+    let totalPages = capaConfig ? 1 : 0;
+    for (const outra of outrasPaginas) {
+        const isRenderPage = outra.slots?.some(s => {
+            const def = slotDefaults[s.id];
+            return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+        });
+        totalPages += isRenderPage ? (renderCount || 1) : 1;
+    }
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -734,43 +738,41 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         );
                     })()}
 
-                    {interiorConfig && (() => {
-                        const bd = interiorConfig.backdrop_id ? backdrops.find(b => b.id === interiorConfig.backdrop_id) : null;
-                        const n = renderCount || 1;
-                        return (
-                            <div className="flex items-center gap-3 p-3 border border-blue-100 rounded-lg bg-blue-50/40">
-                                <span className="w-7 h-7 bg-blue-100 text-blue-600 rounded-full text-xs font-bold flex items-center justify-center shrink-0">
-                                    {n > 1 ? `×${n}` : '2'}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-700">
-                                        Interior{n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
-                                    </p>
-                                    <p className="text-[11px] text-gray-400">{interiorConfig.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto + render</p>
-                                </div>
-                                <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
-                                    {bd ? `${bd.nome} · ${bd.tipo_arquivo}` : 'Sem fundo ⚠'}
-                                </span>
-                            </div>
-                        );
-                    })()}
+                    {(() => {
+                        let runningPageNum = capaConfig ? 2 : 1;
+                        return outrasPaginas.map((p, i) => {
+                            const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
+                            const isRenderPage = p.slots?.some(s => {
+                                const def = slotDefaults[s.id];
+                                return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+                            });
 
-                    {outrasPaginas.map((p, i) => {
-                        const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
-                        const pageNum = 1 + (interiorConfig ? (renderCount || 1) : 0) + i + 1;
-                        return (
-                            <div key={i} className="flex items-center gap-3 p-3 border border-gray-100 rounded-lg bg-gray-50/50">
-                                <span className="w-7 h-7 bg-orange-100 text-orange-600 rounded-full text-xs font-bold flex items-center justify-center shrink-0">{pageNum}</span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-700">{p.descricao || `Página ${p.pagina}`}</p>
-                                    <p className="text-[11px] text-gray-400">{p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto</p>
+                            const n = isRenderPage ? (renderCount || 1) : 1;
+                            const currentNum = runningPageNum;
+                            runningPageNum += n;
+
+                            return (
+                                <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${isRenderPage ? 'border-blue-100 bg-blue-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
+                                    <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${isRenderPage ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                        {n > 1 ? `×${n}` : currentNum}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-gray-700">
+                                            {p.descricao || `Página ${p.pagina}`}
+                                            {isRenderPage && n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
+                                        </p>
+                                        <p className="text-[11px] text-gray-400">
+                                            {p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto
+                                            {isRenderPage && ' + render'}
+                                        </p>
+                                    </div>
+                                    <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
+                                        {bd ? `${bd.nome} · ${bd.tipo_arquivo}` : 'Sem fundo ⚠'}
+                                    </span>
                                 </div>
-                                <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
-                                    {bd ? `${bd.nome} · ${bd.tipo_arquivo}` : 'Sem fundo ⚠'}
-                                </span>
-                            </div>
-                        );
-                    })}
+                            );
+                        });
+                    })()}
                 </div>
             </div>
 
