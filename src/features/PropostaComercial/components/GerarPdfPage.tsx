@@ -325,7 +325,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             // ── Função auxiliar Script 01 (Descritivo Tabulado) ───────────────
 
-            function renderDescritivo01(doc: jsPDF, text: string, slot: SlotElemento, fontSizeMap: Record<string, number> = {}) {
+            function renderDescritivo01(doc: jsPDF, lines: string[], slot: SlotElemento, fontSizeMap: Record<string, number> = {}): string[] {
                 const configColor = slotDefaults[slot.id]?.color;
                 const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
                 doc.setTextColor(r, g, b);
@@ -333,8 +333,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const defaultSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
                 let configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
                 if (configFontFamily === 'century-gothic') configFontFamily = 'helvetica';
-
-                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
                 let currentY = slot.y_mm;
                 const lineHeight = defaultSize * 0.35; // mm per line approx (tighter)
@@ -347,8 +345,11 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const COL_UNID = X_START + 25;
                 const COL_DESC = X_START + 40;
 
-                for (const line of lines) {
-                    if (currentY > maxY - lineHeight) break; // Não ultrapassar o limite inferior do slot
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (currentY > maxY - lineHeight) {
+                        return lines.slice(i); // Retorna as linhas excedentes para a próxima página
+                    }
 
                     // Checa se a linha tem tabs (indicando que é um item da lista)
                     if (line.includes('\t')) {
@@ -404,20 +405,39 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         currentY += lineHeight + (lineSpacing * 2);
                     }
                 }
+
+                return []; // Todas as linhas couberam nesta página
             }
 
             // ── Renderizar textos ─────────────────────────────────────────────
 
-            function renderizarTextos(slots: SlotElemento[], nameToValue: Record<string, string>, isCapa = false, fontSizeMap: Record<string, number> = {}) {
+            function renderizarTextos(
+                slots: SlotElemento[],
+                nameToValue: Record<string, string>,
+                isCapa = false,
+                fontSizeMap: Record<string, number> = {},
+                linesOverride?: string[]
+            ): string[] {
+                let leftOvers: string[] = [];
+
                 for (const slot of slots) {
                     const text = nameToValue[slot.nome] ?? '';
-                    if (!text) continue;
-
                     const slotDef = slotDefaults[slot.id];
+
+                    // Se estamos numa página de transbordo (linesOverride existe), ignorar todos os slots NÃO-SCRIPT 01
+                    if (linesOverride && slotDef?.scriptName !== '01') continue;
+
+                    // Se não tem texto E também não temos linesOverride, pula
+                    if (!text && !linesOverride) continue;
+
                     if (slotDef?.scriptName === '01') {
-                        renderDescritivo01(doc, text, slot, fontSizeMap);
+                        // Passa as linhas de override se existirem, senão quebra o texto novo
+                        const linesToRender = linesOverride ?? text.split('\n').map(l => l.trim()).filter(Boolean);
+                        leftOvers = renderDescritivo01(doc, linesToRender, slot, fontSizeMap);
                         continue; // Importante: Pula a renderização padrão de texto se for o script 01
                     }
+
+                    if (!text) continue; // Slots normais precisam de texto
 
                     // Cor: config default > slot definition
                     const configColor = slotDefaults[slot.id]?.color;
@@ -472,6 +492,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         doc.text(`[${slot.nome}]`, slot.x_mm, slot.y_mm - 1);
                     }
                 }
+                return leftOvers;
             }
 
             let pageIndex = 0;
@@ -570,22 +591,31 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             // ── Outras páginas ────────────────────────────────────────────────
 
             for (const outra of outrasPaginas) {
-                setProgress(`Gerando ${outra.descricao || `página ${outra.pagina}`}...`);
-                if (pageIndex > 0) doc.addPage();
-
+                // Prepara fundos e mapas de fontes
                 const bd = outra.backdrop_id
                     ? backdrops.find(b => b.id === outra.backdrop_id) ?? null
                     : null;
+                const textMap = buildTextMap(outra);
+                const fsMap = buildFontSizeMap(outra);
 
-                if (bd) {
-                    await adicionarFundo(doc, bd, W, H);
-                } else {
-                    doc.setFillColor(252, 252, 252);
-                    doc.rect(0, 0, W, H, 'F');
-                }
+                // Controle do Script 01 (transbordamento de linhas)
+                let remainingLines: string[] | undefined = undefined;
 
-                renderizarTextos(outra.slots ?? [], buildTextMap(outra), false, buildFontSizeMap(outra));
-                pageIndex++;
+                do {
+                    setProgress(`Gerando ${outra.descricao || `página ${outra.pagina}`}...`);
+                    if (pageIndex > 0) doc.addPage();
+
+                    if (bd) {
+                        await adicionarFundo(doc, bd, W, H);
+                    } else {
+                        doc.setFillColor(252, 252, 252);
+                        doc.rect(0, 0, W, H, 'F');
+                    }
+
+                    // Renderiza e captura sobras (se existirem, remainingLines será um array, vazio ou cheio)
+                    remainingLines = renderizarTextos(outra.slots ?? [], textMap, false, fsMap, remainingLines);
+                    pageIndex++;
+                } while (remainingLines && remainingLines.length > 0);
             }
 
             // Libera a memória das URLs temporárias geradas localmente
