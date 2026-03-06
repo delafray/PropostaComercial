@@ -265,6 +265,9 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
                             map[slot.nome] = `${meses[agora.getMonth()]} | ${agora.getFullYear()}`;
                         }
+                        if (slotDef?.scriptName === '01') {
+                            map[slot.nome] = proposta?.dados?.memorial ?? '';
+                        }
                         continue;
                     }
 
