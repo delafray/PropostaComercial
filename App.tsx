@@ -6,6 +6,7 @@ import Users from './pages/Users';
 import { useAuth } from './context/AuthContext';
 import Photos from './pages/Photos';
 import Tags from './pages/Tags';
+import PropostaComercial from './src/features/PropostaComercial';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -30,6 +31,7 @@ const App: React.FC = () => {
 
         <Route path="/fotos" element={<ProtectedRoute><Photos /></ProtectedRoute>} />
         <Route path="/tags" element={<ProtectedRoute><Tags /></ProtectedRoute>} />
+        <Route path="/propostas" element={<ProtectedRoute><PropostaComercial /></ProtectedRoute>} />
 
         <Route path="/" element={<Navigate to="/fotos" />} />
       </Routes>
