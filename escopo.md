@@ -1,8 +1,5 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
-## ⏳ TAREFA EM ANDAMENTO
-**MIGRATION PENDENTE (bloqueante):** `20260306_pc_slots_fix_where.sql` ainda não aplicada no Supabase. Sem ela, nomes de slots no BD não batem com o código → auto-fill e PDF ficam em branco.
-
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
 **Fix: mode='field' não renderizava no PDF**
 - Bug 1: sem briefing, rawVal=null → slot era pulado. Fix: fallback `briefing[fieldKey] > manual > configDefault`.

@@ -255,12 +255,11 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     const manual = pg?.slots?.[slot.id];
                     const configDefault = slotDef?.value ?? '';
 
-                    // Field mode → briefing[fieldKey] > manual > configDefault
+                    // Field mode → briefing[fieldKey] > manual (ignora value residual)
                     if (mode === 'field' && slotDef?.fieldKey) {
                         const rawVal = (proposta?.dados?.briefing as any)?.[slotDef.fieldKey];
                         const resolved = (rawVal ? String(rawVal).trim().toUpperCase() : '')
-                            || (manual ? String(manual).trim() : '')
-                            || configDefault;
+                            || (manual ? String(manual).trim() : '');
                         if (resolved) map[slot.nome] = resolved;
                         continue;
                     }
@@ -318,7 +317,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                     // Fonte e estilo: config default > slot definition
                     const configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
-                    const configFontStyle  = slotDefaults[slot.id]?.fontStyle  ?? slot.font_style ?? 'normal';
+                    const configFontStyle = slotDefaults[slot.id]?.fontStyle ?? slot.font_style ?? 'normal';
                     doc.setFont(
                         configFontFamily,
                         configFontStyle === 'bold' ? 'bold'

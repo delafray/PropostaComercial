@@ -125,7 +125,9 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                         // script mode → empty (rendered automatically)
                         if (def?.mode === 'script') return [s.id, ''];
                         const savedVal = savedPg?.slots?.[s.id] ?? '';
-                        return [s.id, savedVal || (def?.value ?? '')];
+                        // value só como fallback em mode='text' (ignora em field/script)
+                        const fallback = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';
+                        return [s.id, savedVal || fallback];
                     })
                 ),
                 fontSizes: Object.fromEntries(
