@@ -50,6 +50,274 @@ function hexToRgb(hex: string): [number, number, number] {
     return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0];
 }
 
+// ── Helpers: Script Planta ────────────────────────────────────────────────────
+
+/** Retorna as dimensões naturais (pixels) de um File de imagem (JPG/PNG/SVG). */
+async function getImageNaturalSize(file: File): Promise<{ w: number; h: number }> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => { URL.revokeObjectURL(url); resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não foi possível ler dimensões da planta')); };
+        img.src = url;
+    });
+}
+
+/** Calcula posição/tamanho "contain" dentro do slot em mm (maior possível, sem distorção, centralizado). */
+function containInSlot(
+    slot: SlotElemento,
+    imgW: number,
+    imgH: number
+): { x: number; y: number; w: number; h: number } {
+    const slotAsp = slot.w_mm / Math.max(slot.h_mm, 0.001);
+    const imgAsp = imgW / Math.max(imgH, 0.001);
+    let w, h;
+    if (imgAsp > slotAsp) {
+        w = slot.w_mm;
+        h = w / imgAsp;
+    } else {
+        h = slot.h_mm;
+        w = h * imgAsp;
+    }
+    return {
+        x: slot.x_mm + (slot.w_mm - w) / 2,
+        y: slot.y_mm + (slot.h_mm - h) / 2,
+        w, h,
+    };
+}
+
+async function fileToBase64(file: File): Promise<{ data: string; format: 'PNG' | 'JPEG' }> {
+    const url = URL.createObjectURL(file);
+    const result = await fetchBase64(url);
+    URL.revokeObjectURL(url);
+    return result;
+}
+
+async function grayscaleBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+                const light = Math.round(gray * 0.4 + 153); // empurra para branco ~60%
+                d[i] = light; d[i + 1] = light; d[i + 2] = light;
+            }
+            ctx.putImageData(imageData, 0, 0);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/png').split(',')[1]);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Erro ao carregar planta')); };
+        img.src = url;
+    });
+}
+
+function loadCanvasFromUrl(url: string): Promise<HTMLCanvasElement> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth;
+            c.height = img.naturalHeight;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            resolve(c);
+        };
+        img.onerror = reject;
+        img.src = url;
+    });
+}
+
+function downscaleCanvas(src: HTMLCanvasElement, maxW: number): HTMLCanvasElement {
+    const scale = Math.min(1, maxW / Math.max(src.width, 1));
+    if (scale >= 1) return src;
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(src.width * scale));
+    c.height = Math.max(1, Math.round(src.height * scale));
+    c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height);
+    return c;
+}
+
+function toGrayArray(canvas: HTMLCanvasElement): Uint8Array {
+    const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    const g = new Uint8Array(canvas.width * canvas.height);
+    for (let i = 0; i < g.length; i++) {
+        g[i] = Math.round(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]);
+    }
+    return g;
+}
+
+interface OcvMatch { cx_ratio: number; cy_ratio: number; w_ratio: number; h_ratio: number; img_aspect: number; label: string; score: number; }
+
+async function matchTemplate(plantaFile: File, ref: TemplateReferencia): Promise<OcvMatch | null> {
+    try {
+        const pUrl = URL.createObjectURL(plantaFile);
+        const plantaFull = await loadCanvasFromUrl(pUrl);
+        URL.revokeObjectURL(pUrl);
+
+        const tmplFull = await loadCanvasFromUrl(ref.url_imagem_referencia);
+
+        const MAX_W = 600;
+        const scale = Math.min(1, MAX_W / Math.max(plantaFull.width, 1));
+        const planta = downscaleCanvas(plantaFull, MAX_W);
+        const tmplW = Math.max(4, Math.round(tmplFull.width * scale));
+        const tmpl = downscaleCanvas(tmplFull, tmplW);
+
+        const PW = planta.width, PH = planta.height;
+        const TW = tmpl.width, TH = tmpl.height;
+        if (TW >= PW || TH >= PH || TW < 2 || TH < 2) return null;
+
+        const pg = toGrayArray(planta);
+        const tg = toGrayArray(tmpl);
+
+        const SAMPLE = 2;
+        let tmean = 0, cnt = 0;
+        for (let ty = 0; ty < TH; ty += SAMPLE) {
+            for (let tx = 0; tx < TW; tx += SAMPLE) { tmean += tg[ty * TW + tx]; cnt++; }
+        }
+        tmean /= Math.max(1, cnt);
+
+        let tSumSq = 0;
+        for (let ty = 0; ty < TH; ty += SAMPLE) {
+            for (let tx = 0; tx < TW; tx += SAMPLE) {
+                const tv = tg[ty * TW + tx] - tmean; tSumSq += tv * tv;
+            }
+        }
+        const tNorm = Math.sqrt(tSumSq);
+        if (tNorm === 0) return null;
+
+        let bestNcc = -1, bestX = 0, bestY = 0;
+        const STRIDE = 3;
+
+        for (let y = 0; y <= PH - TH; y += STRIDE) {
+            for (let x = 0; x <= PW - TW; x += STRIDE) {
+                let pmean = 0, pc = 0;
+                for (let ty = 0; ty < TH; ty += SAMPLE) {
+                    for (let tx = 0; tx < TW; tx += SAMPLE) {
+                        pmean += pg[(y + ty) * PW + (x + tx)]; pc++;
+                    }
+                }
+                pmean /= Math.max(1, pc);
+                let dotProd = 0, pSumSq = 0;
+                for (let ty = 0; ty < TH; ty += SAMPLE) {
+                    for (let tx = 0; tx < TW; tx += SAMPLE) {
+                        const pv = pg[(y + ty) * PW + (x + tx)] - pmean;
+                        const tv = tg[ty * TW + tx] - tmean;
+                        dotProd += pv * tv; pSumSq += pv * pv;
+                    }
+                }
+                const ncc = pSumSq > 0 ? dotProd / (Math.sqrt(pSumSq) * tNorm) : 0;
+                if (ncc > bestNcc) { bestNcc = ncc; bestX = x; bestY = y; }
+            }
+        }
+
+        if (bestNcc < 0.65) return null;
+
+        return {
+            cx_ratio: (bestX + TW / 2) / PW,
+            cy_ratio: (bestY + TH / 2) / PH,
+            w_ratio: TW / PW,
+            h_ratio: TH / PH,
+            img_aspect: tmplFull.width / Math.max(1, tmplFull.height), // aspect ratio original
+            label: ref.nome_item,
+            score: bestNcc,
+        };
+    } catch (e) {
+        console.warn(`OCV match falhou para "${ref.nome_item}":`, e);
+        return null;
+    }
+}
+
+type PlacedBox = { x: number; y: number; w: number; h: number };
+
+function overlapsAny(box: PlacedBox, placed: PlacedBox[]): boolean {
+    for (const p of placed) {
+        if (box.x < p.x + p.w && box.x + box.w > p.x &&
+            box.y < p.y + p.h && box.y + box.h > p.y) return true;
+    }
+    return false;
+}
+
+function drawPlantaAnnotations(
+    doc: jsPDF,
+    drawRegion: { x: number; y: number; w: number; h: number }, // área real da planta no PDF
+    matches: Array<{ match: OcvMatch; ref: TemplateReferencia; imgB64: string; imgFormat: 'PNG' | 'JPEG' }>
+) {
+    const placed: PlacedBox[] = [];
+    const ANGLES = [-Math.PI / 2, -Math.PI / 4, 0, Math.PI / 4, Math.PI / 2, Math.PI * 3 / 4, Math.PI, -Math.PI * 3 / 4];
+
+    for (const { match, ref, imgB64, imgFormat } of matches) {
+        // Mapeia coordenadas do match para a região real da planta (não o slot inteiro)
+        const cx = drawRegion.x + match.cx_ratio * drawRegion.w;
+        const cy = drawRegion.y + match.cy_ratio * drawRegion.h;
+        const mw = Math.max(3, match.w_ratio * drawRegion.w);
+        const mh = Math.max(3, match.h_ratio * drawRegion.h);
+
+        // Overlay da isca (colorida) — aspect ratio preservado (contain dentro do match box)
+        const asp = match.img_aspect;
+        let dispW = mw, dispH = mh;
+        if (mw / Math.max(mh, 0.001) > asp) {
+            dispW = mh * asp; // limitado pela altura
+        } else {
+            dispH = mw / Math.max(asp, 0.001); // limitado pela largura
+        }
+        doc.addImage(imgB64, imgFormat, cx - dispW / 2, cy - dispH / 2, dispW, dispH, undefined, 'FAST');
+
+        // Borda colorida ao redor do overlay (mesmas dimensões do dispW/dispH)
+        const [br, bg, bb] = hexToRgb(ref.cor_holograma ?? '#d22323');
+        doc.setDrawColor(br, bg, bb);
+        doc.setLineWidth(0.4);
+        doc.rect(cx - dispW / 2, cy - dispH / 2, dispW, dispH, 'S');
+
+        // Tamanho do label baseado no texto
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'bold');
+        const LABEL_W = Math.min(doc.getTextWidth(ref.nome_item.toUpperCase()) + 3, 40);
+        const LABEL_H = 4.5;
+        const DIST = Math.max(dispW, dispH) / 2 + 4;
+
+        // Testa 8 ângulos para posição do label — escolhe o primeiro sem sobreposição
+        let lx = cx - LABEL_W / 2;
+        let ly = cy - DIST - LABEL_H;
+        for (let ai = 0; ai < ANGLES.length; ai++) {
+            const candX = cx + Math.cos(ANGLES[ai]) * DIST - LABEL_W / 2;
+            const candY = cy + Math.sin(ANGLES[ai]) * DIST;
+            const clampedX = Math.max(drawRegion.x, Math.min(drawRegion.x + drawRegion.w - LABEL_W, candX));
+            const clampedY = Math.max(drawRegion.y, Math.min(drawRegion.y + drawRegion.h - LABEL_H, candY));
+            const box: PlacedBox = { x: clampedX, y: clampedY, w: LABEL_W, h: LABEL_H };
+            if (!overlapsAny(box, placed) || ai === ANGLES.length - 1) {
+                lx = clampedX; ly = clampedY;
+                placed.push(box);
+                break;
+            }
+        }
+
+        // Seta: linha do centro do label ao centro do match
+        doc.setDrawColor(br, bg, bb);
+        doc.setLineWidth(0.35);
+        doc.line(lx + LABEL_W / 2, ly + LABEL_H / 2, cx, cy);
+
+        // Caixa do label (fundo branco + borda colorida)
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(br, bg, bb);
+        doc.setLineWidth(0.25);
+        doc.rect(lx, ly, LABEL_W, LABEL_H, 'FD');
+
+        // Texto do label
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(br, bg, bb);
+        doc.text(ref.nome_item.toUpperCase(), lx + 1.5, ly + LABEL_H - 1.3);
+    }
+}
+
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void } = {}) {
@@ -67,17 +335,20 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
     const [pastaHandle, setPastaHandle] = useState<FileSystemDirectoryHandle | null>(null);
     const [debugMode, setDebugMode] = useState(false);
     const [slotDefaults, setSlotDefaults] = useState<SlotDefaults>({});
+    const [referenciasOCV, setReferenciasOCV] = useState<TemplateReferencia[]>([]);
 
     useEffect(() => { loadData(); }, []);
 
     async function loadData() {
         try {
             setLoading(true);
-            const [mascaras, bd, propostas] = await Promise.all([
+            const [mascaras, bd, propostas, refs] = await Promise.all([
                 templateService.getMascaras(),
                 templateService.getBackdrops(),
                 propostaService.getPropostas(),
+                templateService.getReferencias().catch(() => []),
             ]);
+            setReferenciasOCV(refs as TemplateReferencia[]);
             // Sempre usa o 1º de cada lista
             const mc = mascaras[0] ?? null;
             setMascara(mc);
@@ -502,11 +773,19 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     return def?.mode === 'script' && def?.scriptName === 'projeto';
                 });
 
-                // Todos os outros slots (exceto o de projeto)
-                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot);
+                // Detecta o slot configurado com o script 'planta'
+                const plantaSlot = (cfgPagina.slots ?? []).find(s => {
+                    const def = slotDefaults[s.id];
+                    return def?.mode === 'script' && def?.scriptName === 'planta';
+                });
 
-                // Repete 1 vez por render (se houver slot de projeto), ou 1 vez normal
-                const timesToRepeat = projetoSlot ? Math.max(renderUrls.length, 1) : 1;
+                // Todos os outros slots (exceto projeto e planta)
+                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot && s !== plantaSlot);
+
+                // Repete 1× por render (projeto), 2× (planta: original + anotada), ou 1× normal
+                const timesToRepeat = projetoSlot
+                    ? Math.max(renderUrls.length, 1)
+                    : plantaSlot ? 2 : 1;
 
                 let remainingLines: string[] | undefined = undefined;
 
@@ -538,6 +817,63 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                                 );
                             } catch (imgErr) {
                                 console.warn(`Render ${ri + 1} não carregado:`, imgErr);
+                            }
+                        }
+
+                        // Insere a planta (original ou cinza anotada) — contain sem distorção
+                        if (plantaSlot) {
+                            const plantaFile = arquivosLocais.find(f => /^planta\.(jpg|jpeg|png|svg)$/i.test(f.name)) ?? null;
+                            if (plantaFile) {
+                                const isSvg = /\.svg$/i.test(plantaFile.name);
+
+                                // Dimensões naturais para calcular contain
+                                const dims = await getImageNaturalSize(plantaFile).catch(() => ({ w: plantaSlot.w_mm, h: plantaSlot.h_mm }));
+                                const region = containInSlot(plantaSlot, dims.w, dims.h);
+
+                                if (ri === 0) {
+                                    // Página A: planta original (contain)
+                                    if (isSvg) {
+                                        const svgText = await plantaFile.text();
+                                        const parser = new DOMParser();
+                                        const svgEl = parser.parseFromString(svgText, 'image/svg+xml').documentElement;
+                                        // Tenta extrair dims do viewBox para contain correto
+                                        const vb = svgEl.getAttribute('viewBox');
+                                        if (vb) {
+                                            const parts = vb.split(/[\s,]+/).map(parseFloat);
+                                            if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
+                                                const svgRegion = containInSlot(plantaSlot, parts[2], parts[3]);
+                                                await svg2pdf(svgEl, doc, { x: svgRegion.x, y: svgRegion.y, width: svgRegion.w, height: svgRegion.h });
+                                            } else {
+                                                await svg2pdf(svgEl, doc, { x: region.x, y: region.y, width: region.w, height: region.h });
+                                            }
+                                        } else {
+                                            await svg2pdf(svgEl, doc, { x: region.x, y: region.y, width: region.w, height: region.h });
+                                        }
+                                    } else {
+                                        const { data, format } = await fileToBase64(plantaFile);
+                                        doc.addImage(data, format, region.x, region.y, region.w, region.h, undefined, 'FAST');
+                                    }
+                                } else {
+                                    // Página B: cinza claro + anotações OpenCV (contain)
+                                    setProgress('Convertendo planta para cinza...');
+                                    const grayData = await grayscaleBase64(plantaFile);
+                                    doc.addImage(grayData, 'PNG', region.x, region.y, region.w, region.h, undefined, 'FAST');
+                                    // Coleta todos os matches válidos com suas imagens
+                                    type MatchEntry = { match: OcvMatch; ref: TemplateReferencia; imgB64: string; imgFormat: 'PNG' | 'JPEG' };
+                                    const plantaMatches: MatchEntry[] = [];
+                                    for (const ref of referenciasOCV) {
+                                        setProgress(`Analisando isca: ${ref.nome_item}...`);
+                                        const match = await matchTemplate(plantaFile, ref);
+                                        if (match) {
+                                            const imgData = await fetchBase64(ref.url_imagem_referencia).catch(() => null);
+                                            if (imgData) plantaMatches.push({ match, ref, imgB64: imgData.data, imgFormat: imgData.format });
+                                        }
+                                    }
+                                    if (plantaMatches.length > 0) {
+                                        // Passa region (área real desenhada) para mapear coordenadas corretamente
+                                        drawPlantaAnnotations(doc, region, plantaMatches);
+                                    }
+                                }
                             }
                         }
 
@@ -592,14 +928,18 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         .filter((f: string) => /^\d+\.(jpg|jpeg|png)$/i.test(f)).length;
     const renderCount = rendersSalvos > 0 ? rendersSalvos : rendersNaPasta;
 
-    // Cálculo dinâmico do total de páginas considerando as repetições de projeto
+    // Cálculo dinâmico do total de páginas considerando as repetições de projeto e planta
     let totalPages = 0;
     for (const p of paginasConfig) {
         const hasProjeto = p.slots?.some(s => {
             const def = slotDefaults[s.id];
             return def?.mode === 'script' && def?.scriptName === 'projeto';
         });
-        totalPages += hasProjeto ? (renderCount || 1) : 1;
+        const hasPlanta = p.slots?.some(s => {
+            const def = slotDefaults[s.id];
+            return def?.mode === 'script' && def?.scriptName === 'planta';
+        });
+        totalPages += hasProjeto ? (renderCount || 1) : hasPlanta ? 2 : 1;
     }
 
     return (
@@ -690,21 +1030,27 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             const def = slotDefaults[s.id];
                             return def?.mode === 'script' && def?.scriptName === 'projeto';
                         });
-                        const n = hasProjeto ? (renderCount || 1) : 1;
+                        const hasPlanta = p.slots?.some(s => {
+                            const def = slotDefaults[s.id];
+                            return def?.mode === 'script' && def?.scriptName === 'planta';
+                        });
+                        const n = hasProjeto ? (renderCount || 1) : hasPlanta ? 2 : 1;
 
                         return (
-                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasProjeto ? 'border-blue-100 bg-blue-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
-                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasProjeto ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasProjeto ? 'border-blue-100 bg-blue-50/40' : hasPlanta ? 'border-green-100 bg-green-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
+                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasProjeto ? 'bg-blue-100 text-blue-600' : hasPlanta ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                                     {p.pagina}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-700">
                                         {p.descricao || `Página ${p.pagina}`}
                                         {hasProjeto && n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
+                                        {hasPlanta && <span className="ml-1.5 text-xs font-normal text-green-600">(original + análise)</span>}
                                     </p>
                                     <p className="text-[11px] text-gray-400">
                                         {p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto
                                         {hasProjeto && ' + projeto'}
+                                        {hasPlanta && ' + planta'}
                                     </p>
                                 </div>
                                 <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>

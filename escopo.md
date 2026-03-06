@@ -1,6 +1,19 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Feature: Script `planta` — Planta Baixa com Análise OpenCV**
+- `ConfiguracaoPage`: adicionado `planta` ao `SCRIPT_OPTIONS`.
+- `GerarPdfPage`: gera 2 páginas por slot configurado com script `planta`:
+  - **Pág. A:** planta original (JPG/PNG/SVG), inserida no slot sem alteração.
+  - **Pág. B:** planta em cinza claro (canvas) + overlay colorido das iscas encontradas por NCC + label com seta anti-sobreposição (8 ângulos candidatos).
+- Template matching: NCC normalizado puro (sem dependência externa), downscale a 600px, stride 3, sample 2. Limiar 0.65.
+- Cor da borda/label/seta por isca: `cor_holograma` (fallback `#d22323`).
+- Anti-sobreposição de labels: testa 8 ângulos ao redor do match, escolhe primeiro sem colisão com labels já posicionados.
+- UI Estrutura: páginas com planta exibidas em verde com label "(original + análise)".
+- `SCRIPTS_MAP.md` atualizado.
+- **Arquivos de planta:** encontrados em `arquivosLocais` por regex `/^planta\.(jpg|jpeg|png|svg)$/i` — mesma arquitetura do script `projeto` (render local, sem upload).
+
+
 **Fix: mode='field' não renderizava no PDF**
 - Bug 1: sem briefing, rawVal=null → slot era pulado. Fix: fallback `briefing[fieldKey] > manual > configDefault`.
 - Bug 2: páginas interiores filtravam `tipo==='texto'`, excluindo slots `tipo='imagem'` em mode='field'. Fix: `textSlots` inclui imagens em field/text mode.

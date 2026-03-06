@@ -55,5 +55,25 @@ Este documento é a referência oficial de todos os scripts usados nos slots. Pa
 
 ---
 
+---
+
+## SCRIPT: `planta` (Planta Baixa + Análise OpenCV)
+
+- **Objetivo:** Insere a planta baixa do projeto e gera uma segunda página com análise automática de símbolos.
+- **Fonte dos dados:** Arquivo `planta.jpg`, `planta.png` ou `planta.svg` da pasta local do projeto.
+- **Comportamento de página:**
+  - **Página A (original):** A planta é inserida no slot exatamente como foi importada, sem alterações.
+  - **Página B (análise):** Mesma página, porém a planta é convertida para **cinza claro** e para cada isca OpenCV cadastrada nos templates:
+    1. O sistema busca o símbolo da isca dentro da planta (NCC — Normalized Cross-Correlation, sem dependência externa).
+    2. Se encontrar match acima do limiar de confiança (0.65): **sobrepõe a imagem da isca colorida** na posição encontrada.
+    3. Desenha uma **borda colorida** ao redor do match (cor definida em `cor_holograma` da isca; fallback `#d22323`).
+    4. Desenha **label com o nome da isca** em caixa branca com borda colorida.
+    5. Desenha uma **seta** ligando o centro do label ao centro do match.
+    6. Se houver múltiplas iscas, os labels são posicionados testando 8 ângulos ao redor do match para **evitar sobreposição**.
+- **Sem iscas cadastradas:** A página B é gerada apenas com a planta cinza (sem anotações).
+- **SVG:** Suportado na página A via `svg2pdf`. Para página B (canvas), SVG é convertido via `<img>` no canvas do browser.
+
+---
+
 ## Como pedir alterações:
 Basta dizer: *"No script **projeto**, quero que a imagem seja centralizada no slot"* ou *"Crie um novo script chamado X que faça Y"*.

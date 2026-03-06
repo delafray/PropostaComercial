@@ -88,6 +88,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Script 01 (Descritivo)',
         description: 'Renderiza o memorial descritivo tabular com categorias em negrito.',
     },
+    {
+        name: 'planta',
+        label: 'Planta Baixa',
+        description: 'Insere a planta baixa do projeto (planta.jpg/png/svg da pasta). Gera 2 páginas: original + versão cinza claro com marcações automáticas das iscas OpenCV.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
