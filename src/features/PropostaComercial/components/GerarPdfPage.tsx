@@ -254,6 +254,12 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         if (slotDef?.scriptName === 'hoje') {
                             map[slot.nome] = new Date().toLocaleDateString('pt-BR');
                         }
+                        if (slotDef?.scriptName === 'cliente_evento') {
+                            const b = proposta?.dados?.briefing;
+                            const cli = (b?.cliente ?? '').trim();
+                            const eve = (b?.evento ?? '').trim();
+                            map[slot.nome] = [cli, eve].filter(Boolean).join(' · ');
+                        }
                         continue;
                     }
 

@@ -102,6 +102,11 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                     if (def?.mode === 'script' && def?.scriptName === 'hoje') {
                         return [s.id, new Date().toLocaleDateString('pt-BR')];
                     }
+                    if (def?.mode === 'script' && def?.scriptName === 'cliente_evento' && briefing) {
+                        const cli = (briefing.cliente ?? '').trim();
+                        const eve = (briefing.evento ?? '').trim();
+                        return [s.id, [cli, eve].filter(Boolean).join(' · ')];
+                    }
                     const val = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';
                     return [s.id, val];
                 })
@@ -129,6 +134,11 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                         if (def?.mode === 'script') {
                             if (def?.scriptName === 'hoje') {
                                 return [s.id, new Date().toLocaleDateString('pt-BR')];
+                            }
+                            if (def?.scriptName === 'cliente_evento') {
+                                const cli = (savedBriefing?.cliente ?? '').trim();
+                                const eve = (savedBriefing?.evento ?? '').trim();
+                                return [s.id, [cli, eve].filter(Boolean).join(' · ')];
                             }
                             return [s.id, ''];
                         }

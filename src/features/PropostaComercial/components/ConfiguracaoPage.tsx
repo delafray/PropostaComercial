@@ -73,6 +73,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Data de Hoje',
         description: 'Insere a data atual formatada (DD/MM/AAAA) neste slot.',
     },
+    {
+        name: 'cliente_evento',
+        label: 'Cliente · Evento',
+        description: 'Insere os dados combinados: {Cliente} · {Evento}.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
