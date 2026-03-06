@@ -107,6 +107,11 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                         const eve = (briefing.evento ?? '').trim();
                         return [s.id, [cli, eve].filter(Boolean).join(' · ')];
                     }
+                    if (def?.mode === 'script' && def?.scriptName === 'mes_ano') {
+                        const agora = new Date();
+                        const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+                        return [s.id, `${meses[agora.getMonth()]} | ${agora.getFullYear()}`];
+                    }
                     const val = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';
                     return [s.id, val];
                 })
@@ -139,6 +144,11 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                 const cli = (savedBriefing?.cliente ?? '').trim();
                                 const eve = (savedBriefing?.evento ?? '').trim();
                                 return [s.id, [cli, eve].filter(Boolean).join(' · ')];
+                            }
+                            if (def?.scriptName === 'mes_ano') {
+                                const agora = new Date();
+                                const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+                                return [s.id, `${meses[agora.getMonth()]} | ${agora.getFullYear()}`];
                             }
                             return [s.id, ''];
                         }

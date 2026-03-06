@@ -260,6 +260,11 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             const eve = (b?.evento ?? '').trim();
                             map[slot.nome] = [cli, eve].filter(Boolean).join(' · ');
                         }
+                        if (slotDef?.scriptName === 'mes_ano') {
+                            const agora = new Date();
+                            const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+                            map[slot.nome] = `${meses[agora.getMonth()]} | ${agora.getFullYear()}`;
+                        }
                         continue;
                     }
 

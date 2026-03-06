@@ -78,6 +78,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Cliente · Evento',
         description: 'Insere os dados combinados: {Cliente} · {Evento}.',
     },
+    {
+        name: 'mes_ano',
+        label: 'Mês e Ano',
+        description: 'Insere o mês e o ano atual (padrão: MÊS | ANO).',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
