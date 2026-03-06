@@ -337,7 +337,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
                 let currentY = slot.y_mm;
-                const lineHeight = defaultSize * 0.45; // mm per line approx
+                const lineHeight = defaultSize * 0.35; // mm per line approx (tighter)
+                const lineSpacing = 0.5; // Espaçamento menor entre linhas
                 const maxY = slot.y_mm + slot.h_mm;
 
                 // Definir larguras/posições das colunas (relativas ao X inicial)
@@ -380,19 +381,26 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             doc.text(desc, COL_DESC, currentY + lineHeight, { maxWidth: maxW - 2 });
                         }
 
+                        // Avança linha para itens normais
+                        currentY += lineHeight + lineSpacing;
+
                     } else {
                         // Linha sem tab: É uma Categoria (ex: "Mobiliário")
                         doc.setFontSize(defaultSize);
                         doc.setFont(configFontFamily, 'bold');
 
-                        currentY += (lineHeight * 0.5); // extra space before category
+                        // Espaço extra antes da categoria (apenas se não for a primeira linha)
+                        if (currentY > slot.y_mm) {
+                            currentY += (lineHeight * 0.8);
+                        }
+
                         if (currentY > maxY - lineHeight) break;
 
                         doc.text(line, COL_DESC, currentY + lineHeight); // Alinhado com a descrição
-                    }
 
-                    // Avança linha
-                    currentY += lineHeight + 1; // 1mm de espaçamento
+                        // Avança linha com um pouco mais de respiro DEPOIS da categoria
+                        currentY += lineHeight + (lineSpacing * 2);
+                    }
                 }
             }
 
