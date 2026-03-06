@@ -319,6 +319,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     const text = nameToValue[slot.nome] ?? '';
                     if (!text) continue;
 
+                    const slotDef = slotDefaults[slot.id];
+
                     if (slotDef?.scriptName === 'descritivo') {
                         renderDescritivo(text, slot, fontSizeMap[slot.id]);
                         continue;
