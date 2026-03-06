@@ -158,33 +158,40 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             const { capaConfig, outrasPaginas } = identificarPaginas(mascara);
 
-            // ── Renders (Conversão Local para Blob URL) ───────────────────────
+            // ── Renders (Conversão Local para File references / Base64 Data URI) ─────────
 
-            let renderUrls: string[] = [];
+            // Aceitaremos Strings (DataURIs vindos do banco) ou Objects (Files crus da pasta do Windows)
+            let renderEntities: (string | File)[] = [];
 
-            // Ordena os arquivos locais pelo nome antes de processar, para garantir que "01", "02", etc., sigam a ordem.
+            // Ordena os arquivos locais pelo nome antes de processar
             const sortedArquivosLocais = [...arquivosLocais].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
-            if (proposta) {
-                if (proposta.dados?.renders?.length) {
-                    for (const renderName of proposta.dados.renders) {
-                        const localFile = sortedArquivosLocais.find(f => f.name === renderName);
-                        if (localFile) {
-                            renderUrls.push(URL.createObjectURL(localFile));
-                        } else {
-                            throw new Error(`A imagem do render "${renderName}" não foi encontrada na pasta local. Conceda acesso à pasta ou verifique se ela existe.`);
-                        }
+            if (proposta?.dados?.renders?.length) {
+                // Proposta salva: pega do filesystem local
+                for (const renderName of proposta.dados.renders) {
+                    const localFile = sortedArquivosLocais.find(f => f.name === renderName);
+                    if (localFile) {
+                        renderEntities.push(localFile);
+                    } else {
+                        console.warn(`Render "${renderName}" não encontrado nos arquivos locais no momento do PDF.`);
                     }
-                } else {
-                    for (const pg of proposta.dados?.paginas ?? []) {
-                        const maskPage = mascara.paginas_config.find(mp => mp.pagina === pg.pagina);
-                        const renderSlot = maskPage?.slots?.find(
-                            (s: SlotElemento) => s.tipo === 'imagem'
-                        );
-                        if (renderSlot && pg.slots[renderSlot.id]) {
-                            renderUrls.push(pg.slots[renderSlot.id]);
-                        }
+                }
+            } else if (proposta && !proposta.dados?.renders?.length) {
+                // Fallback legado (Data URI direto da .pagina)
+                for (const pg of proposta.dados?.paginas ?? []) {
+                    const maskPage = mascara.paginas_config.find(mp => mp.pagina === pg.pagina);
+                    const renderSlot = maskPage?.slots?.find((s: SlotElemento) => s.tipo === 'imagem');
+                    if (renderSlot && pg.slots[renderSlot.id]) {
+                        renderEntities.push(pg.slots[renderSlot.id]);
                     }
+                }
+            }
+
+            // Fallback Crítico se não houver salvamentos formais (apenas pasta lida): carrega JPG/PNG direto pro render
+            if (renderEntities.length === 0 && sortedArquivosLocais.length > 0) {
+                const imagemFiles = sortedArquivosLocais.filter(f => /^\d+\.(jpg|jpeg|png)$/i.test(f.name));
+                for (const f of imagemFiles) {
+                    renderEntities.push(f);
                 }
             }
 
@@ -529,14 +536,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 // Verifica se esta página contém um Slot configurado para injetar os renders
                 const renderSlot = (outra.slots ?? []).find(s => {
                     const def = slotDefaults[s.id];
-                    return def?.scriptName === 'renders';
+                    return def?.scriptName === 'render';
                 }) ?? null;
 
                 // textSlots: todos os slots exceto o renderSlot encontrado
                 const textSlots = (outra.slots ?? []).filter(s => s.id !== renderSlot?.id);
 
                 // Se houver um slot de render, multiplicamos essa página pela qtd de imagens. Senão, 1 vez.
-                const total = renderSlot ? (renderUrls.length || 1) : 1;
+                const total = renderSlot ? (renderEntities.length || 1) : 1;
 
                 for (let ri = 0; ri < total; ri++) {
                     // Controle do Script 01 (transbordamento de linhas em um slot tabular longo)
@@ -555,9 +562,24 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                         // Se existe o slot de Render e estamos apenas na "primeira folha do transbordo", injetamos a imagem.
                         // Obs: Evitamos re-pintar a foto de render se esta for uma página extra (transbordo do script 01)
-                        if (renderSlot && renderUrls[ri] && !remainingLines) {
+                        if (renderSlot && renderEntities[ri] && !remainingLines) {
                             try {
-                                const { data, format } = await fetchBase64(renderUrls[ri]);
+                                const currentEntity = renderEntities[ri];
+                                let base64Data = '';
+
+                                // Extrai DataURI puramente se for um Local File dropado, senão assume a String db.
+                                if (currentEntity instanceof File) {
+                                    base64Data = await new Promise<string>((resolve, reject) => {
+                                        const reader = new FileReader();
+                                        reader.onload = () => resolve(reader.result as string);
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(currentEntity);
+                                    });
+                                } else {
+                                    base64Data = currentEntity;
+                                }
+
+                                const { data, format } = await fetchBase64(base64Data);
                                 doc.addImage(
                                     data, format,
                                     renderSlot.x_mm, renderSlot.y_mm,
@@ -586,9 +608,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     } while (remainingLines && remainingLines.length > 0);
                 }
             }
-
-            // Libera a memória das URLs temporárias geradas localmente
-            renderUrls.forEach(url => URL.revokeObjectURL(url));
 
             setProgress('Finalizando...');
             const blob = doc.output('blob');
@@ -635,7 +654,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
     for (const outra of outrasPaginas) {
         const isRenderPage = outra.slots?.some(s => {
             const def = slotDefaults[s.id];
-            return def?.scriptName === 'renders';
+            return def?.scriptName === 'render';
         });
         totalPages += isRenderPage ? (renderCount || 1) : 1;
     }
@@ -744,7 +763,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
                             const isRenderPage = p.slots?.some(s => {
                                 const def = slotDefaults[s.id];
-                                return def?.scriptName === 'renders';
+                                return def?.scriptName === 'render';
                             });
 
                             const n = isRenderPage ? (renderCount || 1) : 1;
