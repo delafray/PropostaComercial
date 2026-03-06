@@ -29,35 +29,36 @@ export function prefKeyForMascara(mascaraId: string) {
 
 const FONTS = [
     { value: 'helvetica', label: 'Helvetica' },
-    { value: 'times',     label: 'Times' },
-    { value: 'courier',   label: 'Courier' },
+    { value: 'times', label: 'Times' },
+    { value: 'courier', label: 'Courier' },
+    { value: 'century-gothic', label: 'Century Gothic' },
 ];
 
 const STYLE_OPTS = [
-    { value: 'normal', label: 'N', title: 'Normal'  },
-    { value: 'bold',   label: 'B', title: 'Negrito' },
+    { value: 'normal', label: 'N', title: 'Normal' },
+    { value: 'bold', label: 'B', title: 'Negrito' },
     { value: 'italic', label: 'I', title: 'Itálico' },
 ] as const;
 
 const ALIGN_OPTS = [
-    { value: 'left',   label: 'E', title: 'Esquerda' },
-    { value: 'center', label: 'C', title: 'Centro'   },
-    { value: 'right',  label: 'D', title: 'Direita'  },
+    { value: 'left', label: 'E', title: 'Esquerda' },
+    { value: 'center', label: 'C', title: 'Centro' },
+    { value: 'right', label: 'D', title: 'Direita' },
 ] as const;
 
 // Campos diretos do briefing disponíveis para mapeamento
 export const FIELD_OPTIONS = [
-    { key: 'cliente',          label: 'Cliente'                  },
-    { key: 'evento',           label: 'Evento'                   },
-    { key: 'local',            label: 'Local'                    },
-    { key: 'data',             label: 'Data'                     },
-    { key: 'numero',           label: 'Número do Projeto'        },
-    { key: 'numeroStand',      label: 'Número do Stand'          },
-    { key: 'areaStand',        label: 'Área do Stand'            },
-    { key: 'formaConstrutiva', label: 'Altura / Forma'           },
-    { key: 'comercial',        label: 'Comercial'                },
-    { key: 'contato',          label: 'Contato'                  },
-    { key: 'email',            label: 'E-mail'                   },
+    { key: 'cliente', label: 'Cliente' },
+    { key: 'evento', label: 'Evento' },
+    { key: 'local', label: 'Local' },
+    { key: 'data', label: 'Data' },
+    { key: 'numero', label: 'Número do Projeto' },
+    { key: 'numeroStand', label: 'Número do Stand' },
+    { key: 'areaStand', label: 'Área do Stand' },
+    { key: 'formaConstrutiva', label: 'Altura / Forma' },
+    { key: 'comercial', label: 'Comercial' },
+    { key: 'contato', label: 'Contato' },
+    { key: 'email', label: 'E-mail' },
 ];
 
 // Scripts disponíveis (comportamentos nomeados)
@@ -73,10 +74,10 @@ export const SCRIPT_OPTIONS = [
 
 export default function ConfiguracaoPage() {
     const [mascara, setMascara] = useState<TemplateMascara | null>(null);
-    const [loading, setLoading]   = useState(true);
-    const [saving, setSaving]     = useState(false);
-    const [saved, setSaved]       = useState(false);
-    const [error, setError]       = useState('');
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [error, setError] = useState('');
     const [defaults, setDefaults] = useState<SlotDefaults>({});
 
     useEffect(() => { loadData(); }, []);
@@ -88,7 +89,7 @@ export default function ConfiguracaoPage() {
             const mc = mascaras[0] ?? null;
             setMascara(mc);
             if (mc) {
-                const savedData     = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
+                const savedData = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
                 const savedDefaults = (savedData as SlotDefaults) ?? {};
                 const init: SlotDefaults = {};
                 for (const pagina of mc.paginas_config) {
@@ -96,14 +97,14 @@ export default function ConfiguracaoPage() {
                         const ex = savedDefaults[slot.id];
                         const defaultMode: SlotMode = ex?.mode ?? (slot.tipo === 'imagem' ? 'script' : 'text');
                         init[slot.id] = {
-                            value:      ex?.value      ?? '',
-                            fontSize:   ex?.fontSize   ?? slot.font_size  ?? 12,
-                            color:      ex?.color      ?? slot.color      ?? '#000000',
+                            value: ex?.value ?? '',
+                            fontSize: ex?.fontSize ?? slot.font_size ?? 12,
+                            color: ex?.color ?? slot.color ?? '#000000',
                             fontFamily: ex?.fontFamily ?? 'helvetica',
-                            fontStyle:  ex?.fontStyle  ?? (slot.font_style as any) ?? 'normal',
-                            align:      ex?.align      ?? (slot.align     as any) ?? 'left',
-                            mode:       defaultMode,
-                            fieldKey:   ex?.fieldKey   ?? FIELD_OPTIONS[0].key,
+                            fontStyle: ex?.fontStyle ?? (slot.font_style as any) ?? 'normal',
+                            align: ex?.align ?? (slot.align as any) ?? 'left',
+                            mode: defaultMode,
+                            fieldKey: ex?.fieldKey ?? FIELD_OPTIONS[0].key,
                             scriptName: ex?.scriptName ?? (slot.tipo === 'imagem' ? 'render' : SCRIPT_OPTIONS[0].name),
                         };
                     }
@@ -205,9 +206,8 @@ export default function ConfiguracaoPage() {
                                                     <p className="text-xs font-mono font-semibold text-gray-700 truncate" title={fullName}>
                                                         {fullName}
                                                     </p>
-                                                    <span className={`inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${
-                                                        isImagem ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-                                                    }`}>
+                                                    <span className={`inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${isImagem ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+                                                        }`}>
                                                         {slot.tipo}
                                                     </span>
                                                 </div>
@@ -219,11 +219,10 @@ export default function ConfiguracaoPage() {
                                                             key={m}
                                                             type="button"
                                                             onClick={() => update(slot.id, { mode: m })}
-                                                            className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${
-                                                                mode === m
-                                                                    ? 'bg-orange-500 text-white'
-                                                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                                            }`}
+                                                            className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${mode === m
+                                                                ? 'bg-orange-500 text-white'
+                                                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                                                }`}
                                                         >
                                                             {m === 'text' ? 'Texto' : m === 'field' ? 'Campo' : 'Script'}
                                                         </button>
@@ -329,13 +328,11 @@ export default function ConfiguracaoPage() {
                                                             <button
                                                                 key={opt.value} type="button" title={opt.title}
                                                                 onClick={() => update(slot.id, { fontStyle: opt.value })}
-                                                                className={`w-7 h-7 rounded text-xs transition-colors select-none ${
-                                                                    opt.value === 'bold' ? 'font-bold' : opt.value === 'italic' ? 'italic' : ''
-                                                                } ${
-                                                                    def.fontStyle === opt.value
+                                                                className={`w-7 h-7 rounded text-xs transition-colors select-none ${opt.value === 'bold' ? 'font-bold' : opt.value === 'italic' ? 'italic' : ''
+                                                                    } ${def.fontStyle === opt.value
                                                                         ? 'bg-orange-500 text-white'
                                                                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 {opt.label}
                                                             </button>
@@ -349,11 +346,10 @@ export default function ConfiguracaoPage() {
                                                             <button
                                                                 key={opt.value} type="button" title={opt.title}
                                                                 onClick={() => update(slot.id, { align: opt.value })}
-                                                                className={`w-7 h-7 rounded text-xs font-semibold transition-colors select-none ${
-                                                                    def.align === opt.value
-                                                                        ? 'bg-orange-500 text-white'
-                                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                                }`}
+                                                                className={`w-7 h-7 rounded text-xs font-semibold transition-colors select-none ${def.align === opt.value
+                                                                    ? 'bg-orange-500 text-white'
+                                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                    }`}
                                                             >
                                                                 {opt.label}
                                                             </button>
@@ -367,13 +363,14 @@ export default function ConfiguracaoPage() {
                                                             <span
                                                                 className="text-xs px-2 py-0.5 rounded border border-dashed border-gray-300 max-w-[180px] truncate"
                                                                 style={{
-                                                                    color:      def.color ?? '#000000',
-                                                                    fontSize:   `${Math.min(def.fontSize, 14)}px`,
-                                                                    fontWeight: def.fontStyle === 'bold'   ? 'bold'   : 'normal',
-                                                                    fontStyle:  def.fontStyle === 'italic' ? 'italic' : 'normal',
-                                                                    fontFamily: def.fontFamily === 'times'   ? 'Georgia, serif'
-                                                                              : def.fontFamily === 'courier' ? 'Courier New, monospace'
-                                                                              : 'Helvetica, Arial, sans-serif',
+                                                                    color: def.color ?? '#000000',
+                                                                    fontSize: `${Math.min(def.fontSize, 14)}px`,
+                                                                    fontWeight: def.fontStyle === 'bold' ? 'bold' : 'normal',
+                                                                    fontStyle: def.fontStyle === 'italic' ? 'italic' : 'normal',
+                                                                    fontFamily: def.fontFamily === 'times' ? 'Georgia, serif'
+                                                                        : def.fontFamily === 'courier' ? 'Courier New, monospace'
+                                                                            : def.fontFamily === 'century-gothic' ? '"Century Gothic", CenturyGothic, AppleGothic, sans-serif'
+                                                                                : 'Helvetica, Arial, sans-serif',
                                                                 }}
                                                             >
                                                                 {def.value}

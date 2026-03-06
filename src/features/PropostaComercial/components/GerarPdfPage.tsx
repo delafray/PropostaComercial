@@ -316,8 +316,16 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     doc.setFontSize(finalSize);
 
                     // Fonte e estilo: config default > slot definition
-                    const configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
+                    let configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
                     const configFontStyle = slotDefaults[slot.id]?.fontStyle ?? slot.font_style ?? 'normal';
+
+                    // Fallback para fontes não-padrão no jsPDF (Century Gothic exigiria .ttf registrado)
+                    if (configFontFamily === 'century-gothic') {
+                        // Por enquanto fallback para helvetica para evitar erros no jsPDF
+                        // mas mantém o valor no estado para futura integração de .ttf
+                        configFontFamily = 'helvetica';
+                    }
+
                     doc.setFont(
                         configFontFamily,
                         configFontStyle === 'bold' ? 'bold'
