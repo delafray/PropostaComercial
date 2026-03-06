@@ -8,43 +8,150 @@ export interface PageFormData {
     fontSizes: Record<string, number>;
 }
 
-// Mapeamento SEMÂNTICO (o que o usuário tinha antes de eu quebrar)
+// Mapeamento: chave do briefing → nomes de slots que recebem esse valor
+// Alinhado com a migration 20260306_pc_slots_fix_where.sql (nomes semânticos v2)
 const SLOT_NOME_MAP: Record<string, string[]> = {
-    'cliente': ['capa_linha1'],
-    'evento': ['capa_linha2'],
-    'numero': ['capa_numero_proposta'],
-    'data': ['capa_data'],
+    'numero':          ['header_numero'],
+    'numeroStand':     ['header_stand', 'footer_n_stand'],
+    'cliente':         ['footer_cliente'],
+    'evento':          ['footer_evento'],
+    'local':           ['footer_local'],
+    'data':            ['footer_data'],
+    'comercial':       ['footer_comercial'],
+    'areaStand':       ['footer_area'],
+    'formaConstrutiva': ['footer_forma'],
+    'email':           ['footer_email'],
 };
 
-export async function parseBriefingPdf(file: File): Promise<BriefingData> {
-    const buffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-    const page = await pdf.getPage(1);
-    const content = await page.getTextContent();
-    const text = content.items.map((it: any) => it.str).join(' ');
-
-    const data: BriefingData = {
-        cliente: extract(text, /Cliente:\s*(.*?)(?=\s*Evento:|$)/i) || 'Cliente não detectado',
-        evento: extract(text, /Evento:\s*(.*?)(?=\s*Local:|$)/i) || 'Evento não detectado',
-        numero: extract(text, /Nº\s*(\d+)/i) || '0000',
-        local: extract(text, /Local:\s*(.*?)(?=\s*Data:|$)/i),
-        data: extract(text, /Data:\s*(.*?)(?=\s*Cliente:|$)/i),
-        contato: null,
-        telefone: null,
-        email: null,
-        comercial: null,
-        numeroStand: null,
-        areaStand: null,
-        formaConstrutiva: null,
-    };
-
-    return data;
-}
+// ── Helper ─────────────────────────────────────────────────────────────────────
 
 function extract(text: string, regex: RegExp): string | null {
     const m = text.match(regex);
-    return m ? m[1].trim() : null;
+    if (!m) return null;
+    const v = m[1]?.trim();
+    return v && v.toLowerCase() !== 'null' ? v : null;
 }
+
+// ── Parser principal ───────────────────────────────────────────────────────────
+// Formato real do briefing RBARROS (extraído do briefing_content.txt):
+//   BRIEFING2026.1127-02 NÚMERO:
+//   EVENTO WTM 2026
+//   LOCAL Expo Center Norte
+//   DATA 14/04/2026 à 16/04/2026CLIENTE RX (Reed Exhibitions) ...
+//   CONTATO Kelly   (11) 99226-0916 TELEFONE
+//   null EMAIL  COMERCIAL Guilherme Barros
+//   Localização do Stand  Número do Stand J64
+//   Área 100.00 m²
+//   Forma Construtiva CONSTRUIDO ...
+
+export async function parseBriefingPdf(file: File): Promise<BriefingData> {
+    const buffer = await file.arrayBuffer();
+    const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const page   = await pdf.getPage(1);
+    const content = await page.getTextContent();
+
+    const tokens: string[] = (content.items as any[]).map(it => it.str).filter((s: string) => s.trim());
+    const text = tokens.join(' ');
+
+    // Número: "BRIEFING2026.1127-02" → "2026.1127-02"
+    const numero =
+        extract(text, /BRIEFING\s*([\d]{4}\.[\d]{4}-[\d]{2})/i) ??
+        extract(text, /([\d]{4}\.[\d]{4}-[\d]{2})/) ??
+        '';
+
+    // Evento: "EVENTO WTM 2026"  (label em maiúsculas, sem dois-pontos)
+    const evento =
+        extract(text, /EVENTO\s+(.+?)(?=\s+LOCAL\s|\s+DATA\s|\s+CLIENTE\s|$)/i) ??
+        extract(text, /Evento:\s*(.+?)(?=\s+Local:|$)/i) ??
+        null;
+
+    // Local: "LOCAL Expo Center Norte"
+    const local =
+        extract(text, /LOCAL\s+(.+?)(?=\s+DATA\s|\s+CLIENTE\s|$)/i) ??
+        extract(text, /Local:\s*(.+?)(?=\s+Data:|$)/i) ??
+        null;
+
+    // Data do evento: "DATA 14/04/2026 à 16/04/2026"  (primeira ocorrência, antes de CLIENTE)
+    const data =
+        extract(text, /DATA\s+([\d\/]+\s*(?:[aà]|-)\s*[\d\/]+)/i) ??
+        extract(text, /Data:\s*([\d\/]+\s*(?:[aà]|-)\s*[\d\/]+)/i) ??
+        null;
+
+    // Cliente: aparece no meio da linha "...16/04/2026CLIENTE RX (Reed Exhibitions)..."
+    const cliente =
+        extract(text, /CLIENTE\s+(.+?)(?=\s+DATA\s+ENTRADA|\s+CONTATO\s|\s+TELEFONE|$)/i) ??
+        extract(text, /Cliente:\s*(.+?)(?=\s+Evento:|$)/i) ??
+        null;
+
+    // Contato
+    const contato =
+        extract(text, /CONTATO\s+(.+?)(?=\s+\(|\s+TELEFONE|$)/i) ??
+        null;
+
+    // Telefone: "(11) 99226-0916"
+    const telefone =
+        extract(text, /(\(\d{2}\)\s*\d[\d\s-]{7,})/) ??
+        null;
+
+    // Email
+    const email =
+        extract(text, /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i) ??
+        null;
+
+    // Comercial: "COMERCIAL Guilherme Barros"
+    const comercial =
+        extract(text, /COMERCIAL\s+(.+?)(?=\s+Localiza|\s+N[uú]mero\s+do|\s+Medidas|$)/i) ??
+        null;
+
+    // Número do Stand: "Número do Stand J64"
+    const numeroStand =
+        extract(text, /N[uú]mero\s+do\s+Stand\s+(\S+)/i) ??
+        null;
+
+    // Área: "Área 100.00 m²"
+    const areaStand =
+        extract(text, /[AÁ]rea\s+([\d.,]+)\s*m/i) ??
+        null;
+
+    // Forma Construtiva
+    const formaConstrutiva =
+        extract(text, /Forma\s+Construtiva\s+(.+?)(?=\s+Fechamento|\s+m²\s|\s*$)/i) ??
+        null;
+
+    const diag = [
+        `numero="${numero}"`,
+        `evento="${evento}"`,
+        `local="${local}"`,
+        `data="${data}"`,
+        `cliente="${cliente}"`,
+        `contato="${contato}"`,
+        `comercial="${comercial}"`,
+        `numeroStand="${numeroStand}"`,
+        `areaStand="${areaStand}"`,
+        `formaConstrutiva="${formaConstrutiva}"`,
+    ].join('\n');
+
+    const result: any = {
+        cliente,
+        evento,
+        numero,
+        local,
+        data,
+        contato,
+        telefone,
+        email,
+        comercial,
+        numeroStand,
+        areaStand,
+        formaConstrutiva,
+        _tokens: tokens,
+        _diag:   diag,
+    };
+
+    return result as BriefingData;
+}
+
+// ── Auto-preenchimento do formulário ──────────────────────────────────────────
 
 export function autoMapBriefing(briefing: BriefingData, mascara: TemplateMascara): PageFormData[] {
     return mascara.paginas_config.map(pagina => {
@@ -53,14 +160,15 @@ export function autoMapBriefing(briefing: BriefingData, mascara: TemplateMascara
         (pagina.slots ?? []).forEach(slot => {
             if (slot.tipo !== 'texto') return;
 
-            // Busca por nome exato ou mapeamento
+            // 1. Mapeamento explícito por nome do slot
             for (const [key, names] of Object.entries(SLOT_NOME_MAP)) {
                 if (names.includes(slot.nome)) {
-                    textValues[slot.id] = (briefing as any)[key] || '';
+                    const val = (briefing as any)[key];
+                    if (val) textValues[slot.id] = val;
                 }
             }
 
-            // Fallback: se o nome do slot for igual à chave do briefing
+            // 2. Fallback: nome do slot == chave do briefing
             if (!textValues[slot.id] && (briefing as any)[slot.nome]) {
                 textValues[slot.id] = (briefing as any)[slot.nome];
             }

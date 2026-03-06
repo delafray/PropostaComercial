@@ -99,4 +99,11 @@ Abaixo, explico de forma simples e livre de "tecnês" o que cada prompt guardado
 
 ---
 
+## 14. 🎯 `PROMPT_14_MELHORIA_MAPEAMENTO_PDF_E_SLOTS.md`
+**(Arquitetura de Dados Dinâmica e PDFs Inteligentes)**
+**O que ele faz:** Ensina a IA a parar de "chumbar" nomes de campos no código e usar **Slots Semânticos**. Ele cria uma ponte inteligente entre o que você digita e onde isso aparece no PDF.
+**Por que é genial:** Se você mudar o desenho da sua folha de proposta amanhã, você não precisa de um programador para mexer no código do PDF. O sistema entende que "footer_cliente" é o cliente em qualquer lugar que ele esteja. Além disso, permite que você salve sua fonte preferida (ex: Century Gothic 12pt) e ela seja lembrada para sempre, tornando a geração de propostas automática e elegante.
+
+---
+
 *(Toda vez que a IA criar um novo Prompt Mestre, ela está autorizada e instruída a atualizar este manual automaticamente para você!)*

@@ -200,25 +200,24 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
         };
         prefService.savePref('ultima_pasta', pref).catch(() => null);
 
-        // Salva imediatamente no banco (upsert silencioso).
-        // IMPORTANTE: merge com dados existentes para não apagar renders já enviados.
+        // Salva imediatamente no banco (aguardado — garante que o briefing esteja
+        // disponível antes do spinner fechar e o usuário trocar de aba).
         if (mascara) {
-            (async () => {
-                try {
-                    const existentes = await propostaService.getPropostas();
-                    const dadosExistentes: Record<string, unknown> = (existentes[0]?.dados as any) ?? {};
-                    await propostaService.upsertProposta({
-                        nome,
-                        mascara_id: mascara.id,
-                        dados: {
-                            ...dadosExistentes,
-                            ...(briefing ? { briefing } : {}),
-                            ...(memorial ? { memorial } : {}),
-                            pasta: { nome: nomePasta, arquivos: files.map(f => f.name) },
-                        },
-                    });
-                } catch { /* silencioso */ }
-            })();
+            try {
+                setLoadingProgress(95);
+                const existentes = await propostaService.getPropostas();
+                const dadosExistentes: Record<string, unknown> = (existentes[0]?.dados as any) ?? {};
+                await propostaService.upsertProposta({
+                    nome,
+                    mascara_id: mascara.id,
+                    dados: {
+                        ...dadosExistentes,
+                        ...(briefing ? { briefing } : {}),
+                        ...(memorial ? { memorial } : {}),
+                        pasta: { nome: nomePasta, arquivos: files.map(f => f.name) },
+                    },
+                });
+            } catch { /* silencioso */ }
         }
         setLoadingPasta(false);
         setLoadingProgress(0);
@@ -402,11 +401,6 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
     }
 
     // ── Formulário ─────────────────────────────────────────────────────────────
-
-    // Página interior = primeira com slot de imagem
-    const firstInteriorIdx = mascara.paginas_config.findIndex((p: PaginaConfig) =>
-        p.slots?.some((s: SlotElemento) => s.tipo === 'imagem')
-    );
 
     return (
         <div className="max-w-4xl mx-auto relative">
@@ -645,9 +639,6 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
 
                             const isInterior = pagina.slots?.some((s: SlotElemento) => s.tipo === 'imagem');
 
-                            // Páginas interiores duplicadas ficam ocultas
-                            if (isInterior && pi !== firstInteriorIdx) return null;
-
                             const allSlots = pagina.slots ?? [];
                             const textSlots = allSlots.filter((s: SlotElemento) => s.tipo === 'texto');
                             if (allSlots.length === 0) return null;
@@ -661,10 +652,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                             {pagina.pagina}
                                         </span>
                                         <span className="text-sm font-semibold text-white flex-1 truncate">
-                                            {isInterior
-                                                ? 'Interior — todas as páginas de render'
-                                                : `Página ${pagina.pagina}${pagina.descricao ? ' · ' + pagina.descricao : ''}`
-                                            }
+                                            {`Página ${pagina.pagina}${pagina.descricao ? ' · ' + pagina.descricao : ''}${isInterior ? ' · render' : ''}`}
                                         </span>
                                         {bd ? (
                                             <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded font-medium shrink-0">

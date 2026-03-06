@@ -215,28 +215,23 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const nStand = b?.numeroStand ?? '';
                 const area = b?.areaStand ? `${b?.areaStand} m²` : '';
                 const comercial = (b?.comercial ?? '').toUpperCase();
+                const forma = (b?.formaConstrutiva ?? tamanho).toUpperCase();
 
-                const capaTexto = [cliente, evento].filter(Boolean).join(' : ');
-
-                // Labels solicitadas pelo RBARROS
+                // Nomes semânticos v2 — alinhados com 20260306_pc_slots_fix_where.sql
                 return {
-                    capa_linha1: capaTexto,
-                    campo_1: capaTexto, // Suporte a layouts que usem o nome genérico
+                    capa_linha1: [cliente, evento].filter(Boolean).join(' : '),
                     capa_linha2: `${mesExtenso} : ${anoAtual}`,
                     header_numero: b?.numero ?? '',
-                    header_2: b?.numero ?? '', // Mapeamento técnico frequente
                     header_stand: nStand,
-                    header_3: nStand, // Mapeamento técnico frequente
-                    // Mapeamento Numérico com Etiquetas
-                    footer_4: `EVENTO: ${evento}`,
-                    footer_6: `LOCAL: ${local}`,
-                    footer_10: `DATA: ${data}`,
-                    footer_5: `CLIENTE: ${cliente}`,
-                    footer_7: `Nº STAND: ${nStand}`,
-                    footer_9: `ÁREA: ${area}`,
-                    footer_11: `ALTURA TOTAL: ${b?.formaConstrutiva ?? tamanho}`,
-                    footer_12: `COMERCIAL: ${comercial}`,
-                    footer_8: `PROJETISTA: RONALDO BORBA`,
+                    footer_cliente: cliente,
+                    footer_comercial: comercial,
+                    footer_evento: evento,
+                    footer_n_stand: nStand,
+                    footer_forma: forma,
+                    footer_area: area,
+                    footer_data: data,
+                    footer_local: local,
+                    footer_email: b?.email ?? '',
                 };
             }
 
@@ -251,24 +246,25 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const pg = proposta?.dados?.paginas?.find(p => p.pagina === pageConfig.pagina);
 
                 for (const slot of pageConfig.slots ?? []) {
+                    const slotDef = slotDefaults[slot.id];
+                    const mode = slotDef?.mode ?? (slot.tipo === 'imagem' ? 'script' : 'text');
+
+                    // Script mode → deixa o mecanismo de render/imagem tratar
+                    if (mode === 'script') continue;
+
+                    // Field mode → valor direto do briefing (sem label "CLIENTE:" etc.)
+                    if (mode === 'field' && slotDef?.fieldKey) {
+                        const rawVal = (proposta?.dados?.briefing as any)?.[slotDef.fieldKey];
+                        if (rawVal) map[slot.nome] = String(rawVal).trim().toUpperCase();
+                        continue;
+                    }
+
                     const manual = pg?.slots?.[slot.id];
                     const auto = slot.tipo === 'texto' ? (autoMap[slot.nome] || '') : '';
-                    const configDefault = slotDefaults[slot.id]?.value ?? '';
+                    const configDefault = slotDef?.value ?? '';
 
                     // Pula slot sem nenhum valor disponível
                     if (!manual && !auto && !configDefault) continue;
-
-                    // Lógica RBARROS: Prioridade para o formato enriquecido (com label)
-                    if (slot.tipo === 'texto' && (slot.nome.startsWith('footer_') || slot.nome.startsWith('capa_') || slot.nome === 'campo_1')) {
-                        if (auto.includes(':')) {
-                            const label = auto.split(':')[0].trim() + ':';
-                            const manualStr = String(manual || '');
-                            if (!manualStr || !manualStr.includes(label)) {
-                                map[slot.nome] = auto;
-                                continue;
-                            }
-                        }
-                    }
 
                     // Prioridade: manual > briefing auto > config default
                     map[slot.nome] = (manual !== undefined && manual !== null && String(manual).trim() !== '')
@@ -301,7 +297,9 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     const text = nameToValue[slot.nome] ?? '';
                     if (!text) continue;
 
-                    const [r, g, b] = hexToRgb(slot.color ?? '#000000');
+                    // Cor: config default > slot definition
+                    const configColor = slotDefaults[slot.id]?.color;
+                    const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
                     doc.setTextColor(r, g, b);
 
                     // Tamanho: fontSizeMap (proposta/config) > slot.font_size > 10
@@ -314,14 +312,18 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                     doc.setFontSize(finalSize);
 
+                    // Fonte e estilo: config default > slot definition
+                    const configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
+                    const configFontStyle  = slotDefaults[slot.id]?.fontStyle  ?? slot.font_style ?? 'normal';
                     doc.setFont(
-                        'helvetica',
-                        slot.font_style === 'bold' ? 'bold'
-                            : slot.font_style === 'italic' ? 'italic'
+                        configFontFamily,
+                        configFontStyle === 'bold' ? 'bold'
+                            : configFontStyle === 'italic' ? 'italic'
                                 : 'normal'
                     );
 
-                    const align = slot.align ?? 'left';
+                    // Alinhamento: config default > slot definition
+                    const align = (slotDefaults[slot.id]?.align ?? slot.align ?? 'left') as 'left' | 'center' | 'right';
                     const x = align === 'center' ? slot.x_mm + slot.w_mm / 2
                         : align === 'right' ? slot.x_mm + slot.w_mm
                             : slot.x_mm;

@@ -1,5 +1,13 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
+## ⏳ TAREFA EM ANDAMENTO
+**Fix: Alinhamento ao schema v2 de slots semânticos**
+- `briefingParser.ts` — `SLOT_NOME_MAP` atualizado para nomes v2 (`footer_cliente`, `footer_evento`, `header_numero`, etc.)
+- `GerarPdfPage.tsx` — `buildBriefingMap()` atualizado para nomes v2 (sem labels "CLIENTE:", usa valores puros)
+- `GerarPdfPage.tsx` — `buildTextMap` simplificado: removida "Lógica RBARROS" de labels (era para formato antigo)
+- **MIGRATION PENDENTE**: ainda precisa aplicar `20260306_pc_slots_fix_where.sql` no Supabase para que os nomes dos slots no BD batam com o código. Sem isso, auto-fill e PDF continuam em branco.
+- Depois da migration: re-abrir pasta em Nova Proposta para recarregar briefing e re-salvar.
+
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
 **Feature: Configuração Padrão de Slots + correções de UI e PDF**
 
