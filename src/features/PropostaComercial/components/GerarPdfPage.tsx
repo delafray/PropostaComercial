@@ -369,8 +369,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         // ID (left)
                         if (parts[0]) doc.text(parts[0], X_START, currentY + lineHeight);
 
-                        // Qtd (center)
-                        if (parts[1]) doc.text(parts[1], COL_QTD, currentY + lineHeight, { align: 'center' });
+                        // Qtd (left)
+                        if (parts[1]) doc.text(parts[1], COL_QTD, currentY + lineHeight);
 
                         // Unid (left)
                         if (parts[2]) doc.text(parts[2], COL_UNID, currentY + lineHeight);
