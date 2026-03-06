@@ -249,8 +249,13 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     const slotDef = slotDefaults[slot.id];
                     const mode = slotDef?.mode ?? (slot.tipo === 'imagem' ? 'script' : 'text');
 
-                    // Script mode → deixa o mecanismo de render/imagem tratar
-                    if (mode === 'script') continue;
+                    // Script mode → deixa o mecanismo de render/imagem tratar (exceto scripts de texto como 'hoje')
+                    if (mode === 'script') {
+                        if (slotDef?.scriptName === 'hoje') {
+                            map[slot.nome] = new Date().toLocaleDateString('pt-BR');
+                        }
+                        continue;
+                    }
 
                     const manual = pg?.slots?.[slot.id];
                     const configDefault = slotDef?.value ?? '';

@@ -204,6 +204,7 @@ export default function TemplateManager() {
     const rfFileRef = useRef<HTMLInputElement>(null);
 
     const [generatingVisualizacao, setGeneratingVisualizacao] = useState<string | null>(null);
+    const [resyncingId, setResyncingId] = useState<string | null>(null);
 
     useEffect(() => { loadAll(); }, []);
 
@@ -339,6 +340,14 @@ export default function TemplateManager() {
 
     async function handleDetectarSlots(mc: TemplateMascara) {
         const id = mc.id;
+        const existingSlots = (editingPaginas[id] ?? mc.paginas_config ?? [])
+            .reduce((acc: number, p: PaginaConfig) => acc + (p.slots?.length ?? 0), 0);
+        if (existingSlots > 0) {
+            const ok = confirm(
+                `"Detectar" irá recriar todos os ${existingSlots} slot(s) a partir do PDF atual, perdendo nomes semânticos e configurações de campo/texto.\n\nPara atualizar só as coordenadas preservando tudo, use "Re-sync".\n\nDeseja continuar mesmo assim?`
+            );
+            if (!ok) return;
+        }
         const setProgress = (pct: number, label: string) =>
             setDetectProgress(prev => ({ ...prev, [id]: { pct, label } }));
         try {
@@ -416,8 +425,8 @@ export default function TemplateManager() {
     async function handleDeleteMascara(id: string, url: string) {
         const linked = backdrops.filter((b: TemplateBackdrop) => b.mascara_id === id).length;
         const msg = linked > 0
-            ? `Esta máscara tem ${linked} fundo(s) vinculado(s). O vínculo será removido. Confirmar exclusão?`
-            : 'Excluir esta máscara?';
+            ? `Esta máscara tem ${linked} fundo(s) vinculado(s). O vínculo será removido.\n\n⚠️ Todas as configurações de slots serão perdidas permanentemente. Confirmar exclusão?`
+            : '⚠️ Todas as configurações de slots serão perdidas permanentemente.\n\nExcluir esta máscara?';
         if (!confirm(msg)) return;
         try { await templateService.deleteMascara(id, url); await loadAll(); }
         catch (e: unknown) { setError((e as Error).message); }
@@ -433,6 +442,43 @@ export default function TemplateManager() {
             setEditingPaginas((prev: Record<string, PaginaConfig[]>) => { const n = { ...prev }; delete n[id]; return n; });
         } catch (e: unknown) { setError((e as Error).message); }
         finally { setUploading(false); }
+    }
+
+    async function handleResyncCoordenadas(mc: TemplateMascara, file: File) {
+        const id = mc.id;
+        const existingPaginas: PaginaConfig[] = editingPaginas[id] ?? mc.paginas_config ?? [];
+        const existingSlots = existingPaginas.reduce((acc: number, p: PaginaConfig) => acc + (p.slots?.length ?? 0), 0);
+        if (!confirm(`Atualizar coordenadas a partir do novo PDF?\n\nApenas X/Y/W/H dos ${existingSlots} slot(s) serão substituídos. Nomes, modos, campos e configurações permanecem intactos.\n\nContinuar?`)) return;
+        try {
+            setResyncingId(id); setError('');
+            const novaPaginas = await parseMascaraPdf(file, () => { });
+            if (novaPaginas.length !== existingPaginas.length) {
+                const sigdiff = !confirm(`Atenção: o novo PDF tem ${novaPaginas.length} página(s) e a máscara atual tem ${existingPaginas.length}. Continuar mesmo assim?`);
+                if (sigdiff) return;
+            }
+            const mergedPaginas: PaginaConfig[] = existingPaginas.map((existingPage: PaginaConfig, pageIdx: number) => {
+                const newPage = novaPaginas[pageIdx];
+                if (!newPage) return existingPage;
+                const newSlots = newPage.slots ?? [];
+                const existingSlotList = existingPage.slots ?? [];
+                if (newSlots.length !== existingSlotList.length) {
+                    console.warn(`Página ${existingPage.pagina}: slots ${existingSlotList.length} → ${newSlots.length} (correspondência por índice)`);
+                }
+                const mergedSlots: SlotElemento[] = existingSlotList.map((existingSlot: SlotElemento, slotIdx: number) => {
+                    const newSlot = newSlots[slotIdx];
+                    if (!newSlot) return existingSlot;
+                    return { ...existingSlot, x_mm: newSlot.x_mm, y_mm: newSlot.y_mm, w_mm: newSlot.w_mm, h_mm: newSlot.h_mm };
+                });
+                return { ...existingPage, slots: mergedSlots };
+            });
+            const newUrl = await templateService.updateMascaraPdf(id, mc.url_mascara_pdf, file);
+            await templateService.updateMascaraPaginas(id, mergedPaginas);
+            setMascaras((prev: TemplateMascara[]) =>
+                prev.map((m: TemplateMascara) => m.id === id ? { ...m, url_mascara_pdf: newUrl, paginas_config: mergedPaginas } : m)
+            );
+            setEditingPaginas((prev: Record<string, PaginaConfig[]>) => ({ ...prev, [id]: mergedPaginas }));
+        } catch (e: unknown) { setError((e as Error).message); }
+        finally { setResyncingId(null); }
     }
 
     async function handleDeleteReferencia(id: string, url: string) {
@@ -675,6 +721,13 @@ export default function TemplateManager() {
                                                             {isExpanded ? '▲' : '▼'}
                                                             {isExpanded ? 'Fechar' : 'Config'}
                                                         </button>
+                                                        <label
+                                                            className={`cursor-pointer flex items-center gap-1 text-[11px] font-semibold px-2 py-1.5 rounded border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors ${resyncingId === mc.id ? 'opacity-50 pointer-events-none' : ''}`}
+                                                            title="Carrega novo PDF e atualiza apenas as coordenadas (X/Y/W/H) dos slots, preservando nomes, modos e configurações">
+                                                            {resyncingId === mc.id ? '⌛ Re-sync...' : '📐 Re-sync'}
+                                                            <input type="file" accept="application/pdf" className="hidden"
+                                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) handleResyncCoordenadas(mc, f); e.target.value = ''; }} />
+                                                        </label>
                                                         <button
                                                             onClick={() => handleDetectarSlots(mc)}
                                                             disabled={!!detectProgress[mc.id] && detectProgress[mc.id]!.pct < 100}

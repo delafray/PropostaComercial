@@ -99,6 +99,9 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                         const raw = briefing[def.fieldKey];
                         return [s.id, raw ? String(raw).trim() : ''];
                     }
+                    if (def?.mode === 'script' && def?.scriptName === 'hoje') {
+                        return [s.id, new Date().toLocaleDateString('pt-BR')];
+                    }
                     const val = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';
                     return [s.id, val];
                 })
@@ -123,7 +126,12 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                             return [s.id, raw ? String(raw).trim() : ''];
                         }
                         // script mode → empty (rendered automatically)
-                        if (def?.mode === 'script') return [s.id, ''];
+                        if (def?.mode === 'script') {
+                            if (def?.scriptName === 'hoje') {
+                                return [s.id, new Date().toLocaleDateString('pt-BR')];
+                            }
+                            return [s.id, ''];
+                        }
                         const savedVal = savedPg?.slots?.[s.id] ?? '';
                         // value só como fallback em mode='text' (ignora em field/script)
                         const fallback = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';

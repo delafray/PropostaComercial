@@ -68,6 +68,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Render',
         description: 'Insere a imagem do render neste slot. Com múltiplos renders, gera uma página por render.',
     },
+    {
+        name: 'hoje',
+        label: 'Data de Hoje',
+        description: 'Insere a data atual formatada (DD/MM/AAAA) neste slot.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
