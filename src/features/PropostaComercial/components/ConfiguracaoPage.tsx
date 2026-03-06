@@ -163,14 +163,39 @@ export default function ConfiguracaoPage() {
     );
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto pb-10">
 
-            <div className="mb-5 pl-1">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">Configuração Padrão</h1>
-                <p className="text-sm text-gray-400 mt-0.5">
-                    Valores fixos por slot — carregados automaticamente em toda nova proposta.
-                    Máscara: <strong className="text-gray-600">{mascara.nome}</strong>
-                </p>
+            {/* Cabeçalho Fixo (Sticky Header) - Ajustado para empilhar sob abas */}
+            <div className="sticky top-[108px] sm:top-[124px] z-[100] mb-6 -mx-4 px-4 py-4 bg-gray-50/80 backdrop-blur-md border-b border-gray-200 shadow-sm transition-all">
+                <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Configuração Padrão</h1>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                            Valores fixos por slot — carregados em toda nova proposta.
+                            Máscara: <strong className="text-orange-600">{mascara.nome}</strong>
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                        {saved && (
+                            <span className="text-xs text-emerald-600 font-bold animate-in fade-in slide-in-from-right-2 duration-300">
+                                ✓ Salvo com sucesso
+                            </span>
+                        )}
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 shadow-sm ${saving ? 'bg-orange-300' : 'bg-orange-600 hover:bg-orange-700 active:scale-95'
+                                } text-white disabled:opacity-50`}
+                        >
+                            {saving ? (
+                                <><span className="animate-spin inline-block">⟳</span> Gravando...</>
+                            ) : (
+                                'Salvar Alterações'
+                            )}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {error && (
@@ -210,7 +235,7 @@ export default function ConfiguracaoPage() {
                                     };
                                     const mode = def.mode ?? 'text';
                                     const isImagem = slot.tipo === 'imagem';
-                                    const showStyle = mode !== 'script';
+                                    const showStyle = mode !== 'script' || (mode === 'script' && def.scriptName !== 'render');
 
                                     return (
                                         <div key={slot.id} className="px-4 py-3">
@@ -403,17 +428,7 @@ export default function ConfiguracaoPage() {
                 })}
             </div>
 
-            <div className="mt-5 bg-white border border-gray-200 rounded-lg p-5 flex items-center gap-4">
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="bg-orange-600 text-white px-8 py-2.5 rounded-lg text-sm font-bold hover:bg-orange-700 disabled:opacity-40 transition-colors flex items-center gap-2"
-                >
-                    {saving ? <><span className="animate-spin inline-block">⟳</span> Salvando...</> : 'Salvar Configuração'}
-                </button>
-                {saved && <span className="text-sm text-emerald-600 font-semibold">✓ Salvo com sucesso</span>}
-            </div>
-
+            {/* Removido o botão de rodapé para evitar redundância */}
         </div>
     );
 }

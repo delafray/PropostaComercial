@@ -322,10 +322,10 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     doc.setTextColor(r, g, b);
 
                     // Tamanho: fontSizeMap (proposta/config) > slot.font_size > 10
-                    let finalSize = fontSizeMap[slot.id] ?? slot.font_size ?? 10;
-                    if (isCapa) {
+                    let finalSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
+                    if (isCapa && !fontSizeMap[slot.id] && !slotDefaults[slot.id]?.fontSize) {
                         finalSize += 8;
-                    } else if (slot.nome.startsWith('footer_')) {
+                    } else if (slot.nome.startsWith('footer_') && !fontSizeMap[slot.id] && !slotDefaults[slot.id]?.fontSize) {
                         finalSize = 10;
                     }
 

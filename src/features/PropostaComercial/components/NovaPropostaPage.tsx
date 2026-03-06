@@ -763,10 +763,8 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                             const isAuto = autoFilledIds.has(slot.id);
                                             const slotDef = slotDefaults[slot.id];
                                             const isFieldMode = slotDef?.mode === 'field';
-                                            const isScriptMode = slotDef?.mode === 'script';
-                                            const fieldLabel = isFieldMode
-                                                ? FIELD_OPTIONS.find(f => f.key === slotDef?.fieldKey)?.label ?? slotDef?.fieldKey
-                                                : null;
+                                            const showFontSize = !isScriptMode || (isScriptMode && slotDef?.scriptName !== 'render');
+
                                             return (
                                                 <div key={slot.id} className="flex items-center gap-3">
                                                     <div className="w-44 shrink-0">
@@ -781,7 +779,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {!isScriptMode && (
+                                                    {showFontSize && (
                                                         <div className="flex items-center gap-1 shrink-0">
                                                             <input
                                                                 type="number"

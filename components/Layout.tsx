@@ -299,7 +299,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, headerActions, mobileS
 
       {/* Main Content Area */}
       <main className="flex-1 md:ml-64 px-1.5 py-2 sm:p-4 md:pt-4 md:px-8 w-full max-w-full">
-        <header className="mb-1 sm:mb-4 flex justify-between items-center gap-3">
+        <header className="sticky top-0 z-[110] -mx-4 px-4 py-2 sm:py-4 bg-slate-50/90 backdrop-blur-md flex justify-between items-center gap-3 border-b border-transparent transition-all">
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Hamburger Button for Mobile */}
             <button
