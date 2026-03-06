@@ -5,7 +5,7 @@ import { propostaService } from '../services/propostaService';
 import { TemplateMascara, TemplateBackdrop, PaginaConfig, SlotElemento, ProjetoInput, BriefingData } from '../types';
 import { parsePasta } from '../utils/projetoParser';
 import { parseBriefingPdf, autoMapBriefing, PageFormData } from '../utils/briefingParser';
-import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
+import { SlotDefaults, prefKeyForMascara, FIELD_OPTIONS } from './ConfiguracaoPage';
 import { getMaquinaId } from '../utils/maquinaId';
 import { prefService } from '../services/prefService';
 import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
@@ -54,13 +54,13 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
     async function loadData() {
         try {
             setLoading(true);
-            const [mascaras, bd, pref, handle] = await Promise.all([
+            const [mascaras, bd, propostas, pref, handle] = await Promise.all([
                 templateService.getMascaras(),
                 templateService.getBackdrops(),
+                propostaService.getPropostas(),
                 prefService.loadPref('ultima_pasta').catch(() => null),
                 suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
             ]);
-            // Sempre usa a 1ª máscara
             const mc = mascaras[0] ?? null;
             setMascara(mc);
             setBackdrops(bd);
@@ -68,7 +68,18 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                 const savedDefs = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
                 const defs = (savedDefs as SlotDefaults) ?? {};
                 setSlotDefaults(defs);
-                setPages(buildPagesFromMascara(mc, defs));
+
+                const prop = propostas[0] ?? null;
+                if (prop) {
+                    // Restaura estado salvo da proposta
+                    setNomeProposta(prop.nome ?? '');
+                    if (prop.dados?.briefing) setBriefingData(prop.dados.briefing);
+                    if (prop.dados?.pasta?.nome) setPastaName(prop.dados.pasta.nome);
+                    if (prop.dados?.memorial) setMemorialTexto(prop.dados.memorial);
+                    setPages(buildPagesFromProposta(mc, prop, defs));
+                } else {
+                    setPages(buildPagesFromMascara(mc, defs));
+                }
             }
             if (pref) setUltimaPasta(pref as any);
             if (handle) setHandleSalvo(true);
@@ -79,15 +90,52 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
         }
     }
 
-    function buildPagesFromMascara(mc: TemplateMascara, defs: SlotDefaults = {}): PageFormData[] {
+    function buildPagesFromMascara(mc: TemplateMascara, defs: SlotDefaults = {}, briefing: any = null): PageFormData[] {
         return mc.paginas_config.map((p: PaginaConfig) => ({
             textValues: Object.fromEntries(
-                (p.slots ?? []).map((s: SlotElemento) => [s.id, defs[s.id]?.value ?? ''])
+                (p.slots ?? []).map((s: SlotElemento) => {
+                    const def = defs[s.id];
+                    if (def?.mode === 'field' && def?.fieldKey && briefing) {
+                        const raw = briefing[def.fieldKey];
+                        return [s.id, raw ? String(raw).trim() : ''];
+                    }
+                    const val = (!def?.mode || def.mode === 'text') ? (def?.value ?? '') : '';
+                    return [s.id, val];
+                })
             ),
             fontSizes: Object.fromEntries(
                 (p.slots ?? []).map((s: SlotElemento) => [s.id, defs[s.id]?.fontSize ?? s.font_size ?? 12])
             ),
         }));
+    }
+
+    function buildPagesFromProposta(mc: TemplateMascara, prop: any, defs: SlotDefaults = {}): PageFormData[] {
+        const savedBriefing = prop.dados?.briefing ?? null;
+        return mc.paginas_config.map((p: PaginaConfig) => {
+            const savedPg = prop.dados?.paginas?.find((pg: any) => pg.pagina === p.pagina);
+            return {
+                textValues: Object.fromEntries(
+                    (p.slots ?? []).map((s: SlotElemento) => {
+                        const def = defs[s.id];
+                        // field mode → resolve from saved briefing
+                        if (def?.mode === 'field' && def?.fieldKey) {
+                            const raw = savedBriefing?.[def.fieldKey];
+                            return [s.id, raw ? String(raw).trim() : ''];
+                        }
+                        // script mode → empty (rendered automatically)
+                        if (def?.mode === 'script') return [s.id, ''];
+                        const savedVal = savedPg?.slots?.[s.id] ?? '';
+                        return [s.id, savedVal || (def?.value ?? '')];
+                    })
+                ),
+                fontSizes: Object.fromEntries(
+                    (p.slots ?? []).map((s: SlotElemento) => [
+                        s.id,
+                        savedPg?.fontSizes?.[s.id] ?? defs[s.id]?.fontSize ?? s.font_size ?? 12,
+                    ])
+                ),
+            };
+        });
     }
 
     function setTextValue(pi: number, slotId: string, val: string) {
@@ -155,7 +203,23 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
 
                 // ── Auto-preenchimento dos slots ──
                 if (mascara) {
+                    // 1. Mapeamento semântico padrão (slots tipo 'texto' por nome)
                     const pagesMapeadas = autoMapBriefing(briefing, mascara);
+
+                    // 2. Sobrescreve slots em mode='field' com o valor direto do briefing
+                    for (let pi = 0; pi < mascara.paginas_config.length; pi++) {
+                        const pagConfig = mascara.paginas_config[pi];
+                        const pd = pagesMapeadas[pi];
+                        if (!pd) continue;
+                        for (const slot of pagConfig.slots ?? []) {
+                            const def = slotDefaults[slot.id];
+                            if (def?.mode === 'field' && def?.fieldKey) {
+                                const raw = (briefing as any)[def.fieldKey];
+                                pd.textValues[slot.id] = raw ? String(raw).trim() : '';
+                            }
+                        }
+                    }
+
                     setPages(pagesMapeadas);
                     // Registra quais slotIds foram preenchidos (valor não-vazio)
                     const filled = new Set<string>();
@@ -667,6 +731,12 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                             const pageNum = (pi + 1).toString().padStart(2, '0');
                                             const fullName = `pag_${pageNum}-${slot.nome}`;
                                             const isAuto = autoFilledIds.has(slot.id);
+                                            const slotDef = slotDefaults[slot.id];
+                                            const isFieldMode = slotDef?.mode === 'field';
+                                            const isScriptMode = slotDef?.mode === 'script';
+                                            const fieldLabel = isFieldMode
+                                                ? FIELD_OPTIONS.find(f => f.key === slotDef?.fieldKey)?.label ?? slotDef?.fieldKey
+                                                : null;
                                             return (
                                                 <div key={slot.id} className="flex items-center gap-3">
                                                     <div className="w-44 shrink-0">
@@ -681,30 +751,54 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-1 shrink-0">
+                                                    {!isScriptMode && (
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            <input
+                                                                type="number"
+                                                                min={6}
+                                                                max={72}
+                                                                value={pd.fontSizes?.[slot.id] ?? slot.font_size ?? 12}
+                                                                onChange={e => setFontSize(pi, slot.id, Number(e.target.value))}
+                                                                className="w-12 border border-gray-300 rounded px-1 py-1.5 text-xs text-center focus:outline-none focus:border-orange-400"
+                                                            />
+                                                            <span className="text-[10px] text-gray-400">pt</span>
+                                                        </div>
+                                                    )}
+                                                    {isScriptMode ? (
+                                                        <div className="flex-1 flex items-center gap-2">
+                                                            <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-2 py-1 rounded border border-blue-200 shrink-0">
+                                                                ⚙ {slotDef?.scriptName ?? 'script'}
+                                                            </span>
+                                                            <span className="text-xs text-blue-400 italic">Preenchido automaticamente pelo script.</span>
+                                                        </div>
+                                                    ) : isFieldMode ? (
+                                                        <div className="flex-1 flex items-center gap-2">
+                                                            <span className="text-[10px] bg-orange-100 text-orange-700 font-semibold px-2 py-1 rounded border border-orange-200 shrink-0 whitespace-nowrap">
+                                                                → {fieldLabel}
+                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                value={pd.textValues[slot.id] ?? ''}
+                                                                onChange={e => setTextValue(pi, slot.id, e.target.value)}
+                                                                placeholder={`Briefing: ${fieldLabel} — deixe vazio para usar`}
+                                                                className="flex-1 border border-orange-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-orange-400 bg-orange-50/40 placeholder:text-orange-300"
+                                                            />
+                                                        </div>
+                                                    ) : (
                                                         <input
-                                                            type="number"
-                                                            min={6}
-                                                            max={72}
-                                                            value={pd.fontSizes?.[slot.id] ?? slot.font_size ?? 12}
-                                                            onChange={e => setFontSize(pi, slot.id, Number(e.target.value))}
-                                                            className="w-12 border border-gray-300 rounded px-1 py-1.5 text-xs text-center focus:outline-none focus:border-orange-400"
+                                                            type="text"
+                                                            value={pd.textValues[slot.id] ?? ''}
+                                                            onChange={e => {
+                                                                setTextValue(pi, slot.id, e.target.value);
+                                                                if (isAuto) setAutoFilledIds(prev => { const s = new Set(prev); s.delete(slot.id); return s; });
+                                                            }}
+                                                            placeholder={fullName}
+                                                            className={`flex-1 border rounded px-3 py-2 text-sm focus:outline-none transition-colors ${isAuto
+                                                                ? 'border-emerald-300 bg-emerald-50 focus:border-emerald-500'
+                                                                : 'border-gray-300 focus:border-orange-400'
+                                                                }`}
                                                         />
-                                                        <span className="text-[10px] text-gray-400">pt</span>
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        value={pd.textValues[slot.id] ?? ''}
-                                                        onChange={e => {
-                                                            setTextValue(pi, slot.id, e.target.value);
-                                                            if (isAuto) setAutoFilledIds(prev => { const s = new Set(prev); s.delete(slot.id); return s; });
-                                                        }}
-                                                        placeholder={fullName}
-                                                        className={`flex-1 border rounded px-3 py-2 text-sm focus:outline-none transition-colors ${isAuto
-                                                            ? 'border-emerald-300 bg-emerald-50 focus:border-emerald-500'
-                                                            : 'border-gray-300 focus:border-orange-400'
-                                                            }`}
-                                                    />
+                                                    )}
                                                 </div>
                                             );
                                         })}

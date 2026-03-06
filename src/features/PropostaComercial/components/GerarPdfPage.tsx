@@ -252,16 +252,20 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     // Script mode → deixa o mecanismo de render/imagem tratar
                     if (mode === 'script') continue;
 
-                    // Field mode → valor direto do briefing (sem label "CLIENTE:" etc.)
+                    const manual = pg?.slots?.[slot.id];
+                    const configDefault = slotDef?.value ?? '';
+
+                    // Field mode → briefing[fieldKey] > manual > configDefault
                     if (mode === 'field' && slotDef?.fieldKey) {
                         const rawVal = (proposta?.dados?.briefing as any)?.[slotDef.fieldKey];
-                        if (rawVal) map[slot.nome] = String(rawVal).trim().toUpperCase();
+                        const resolved = (rawVal ? String(rawVal).trim().toUpperCase() : '')
+                            || (manual ? String(manual).trim() : '')
+                            || configDefault;
+                        if (resolved) map[slot.nome] = resolved;
                         continue;
                     }
 
-                    const manual = pg?.slots?.[slot.id];
                     const auto = slot.tipo === 'texto' ? (autoMap[slot.nome] || '') : '';
-                    const configDefault = slotDef?.value ?? '';
 
                     // Pula slot sem nenhum valor disponível
                     if (!manual && !auto && !configDefault) continue;
@@ -374,12 +378,24 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     ? backdrops.find(b => b.id === interiorConfig.backdrop_id) ?? null
                     : null;
 
+                // renderSlot: apenas slots imagem que estão em mode='script' (não campo/texto)
                 const renderSlot = (interiorConfig.slots ?? []).find(
-                    (s: SlotElemento) => s.tipo === 'imagem'
+                    (s: SlotElemento) => {
+                        if (s.tipo !== 'imagem') return false;
+                        const def = slotDefaults[s.id];
+                        const m = def?.mode ?? 'script';
+                        return m === 'script';
+                    }
                 ) ?? null;
 
+                // textSlots: todos os não-imagem + imagem que estão em field/text mode
                 const textSlots = (interiorConfig.slots ?? []).filter(
-                    (s: SlotElemento) => s.tipo === 'texto'
+                    (s: SlotElemento) => {
+                        if (s.tipo !== 'imagem') return true;
+                        const def = slotDefaults[s.id];
+                        const m = def?.mode ?? 'script';
+                        return m === 'field' || m === 'text';
+                    }
                 );
 
                 const total = renderUrls.length || 1;

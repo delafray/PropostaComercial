@@ -1,14 +1,22 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
 ## ⏳ TAREFA EM ANDAMENTO
-**Fix: Alinhamento ao schema v2 de slots semânticos**
-- `briefingParser.ts` — `SLOT_NOME_MAP` atualizado para nomes v2 (`footer_cliente`, `footer_evento`, `header_numero`, etc.)
-- `GerarPdfPage.tsx` — `buildBriefingMap()` atualizado para nomes v2 (sem labels "CLIENTE:", usa valores puros)
-- `GerarPdfPage.tsx` — `buildTextMap` simplificado: removida "Lógica RBARROS" de labels (era para formato antigo)
-- **MIGRATION PENDENTE**: ainda precisa aplicar `20260306_pc_slots_fix_where.sql` no Supabase para que os nomes dos slots no BD batam com o código. Sem isso, auto-fill e PDF continuam em branco.
-- Depois da migration: re-abrir pasta em Nova Proposta para recarregar briefing e re-salvar.
+**MIGRATION PENDENTE (bloqueante):** `20260306_pc_slots_fix_where.sql` ainda não aplicada no Supabase. Sem ela, nomes de slots no BD não batem com o código → auto-fill e PDF ficam em branco.
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Fix: mode='field' não renderizava no PDF**
+- Bug 1: sem briefing, rawVal=null → slot era pulado. Fix: fallback `briefing[fieldKey] > manual > configDefault`.
+- Bug 2: páginas interiores filtravam `tipo==='texto'`, excluindo slots `tipo='imagem'` em mode='field'. Fix: `textSlots` inclui imagens em field/text mode.
+- Bug 3: `renderSlot` pegava qualquer `tipo='imagem'` mesmo em field mode. Fix: só detecta imagens em mode='script'.
+- Comportamento: sem briefing, campo usa valor manual salvo na proposta como fallback.
+
+**Fix: Configuração Padrão não refletia em Nova Proposta (modo Campo/Script)**
+- Bug: `buildPagesFromMascara` usava `defs[s.id]?.value` mesmo quando `mode='field'` ou `mode='script'`, propagando valor antigo de texto (ex: 'TESTE').
+- Fix: quando `mode !== 'text'`, `textValues[slotId]` é inicializado com `''`.
+- Visual: slots `mode='field'` mostram badge "→ NomeCampo" + input com placeholder laranja.
+- Visual: slots `mode='script'` mostram badge "⚙ render" + texto explicativo (sem input de tamanho).
+- Importado `FIELD_OPTIONS` de `ConfiguracaoPage` para resolver o label do campo.
+
 **Feature: Configuração Padrão de Slots + correções de UI e PDF**
 
 ### Nova aba "⚙ Configuração" (`ConfiguracaoPage.tsx`)
