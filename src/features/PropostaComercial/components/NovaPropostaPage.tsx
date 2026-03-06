@@ -739,7 +739,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
 
                             const isRenderUrl = pagina.slots?.some((s: SlotElemento) => {
                                 const def = slotDefaults[s.id];
-                                return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+                                return def?.scriptName === 'renders';
                             });
 
                             const allSlots = pagina.slots ?? [];

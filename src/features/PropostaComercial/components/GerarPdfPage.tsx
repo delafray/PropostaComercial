@@ -529,7 +529,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 // Verifica se esta página contém um Slot configurado para injetar os renders
                 const renderSlot = (outra.slots ?? []).find(s => {
                     const def = slotDefaults[s.id];
-                    return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+                    return def?.scriptName === 'renders';
                 }) ?? null;
 
                 // textSlots: todos os slots exceto o renderSlot encontrado
@@ -635,7 +635,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
     for (const outra of outrasPaginas) {
         const isRenderPage = outra.slots?.some(s => {
             const def = slotDefaults[s.id];
-            return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+            return def?.scriptName === 'renders';
         });
         totalPages += isRenderPage ? (renderCount || 1) : 1;
     }
@@ -744,7 +744,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             const bd = p.backdrop_id ? backdrops.find(b => b.id === p.backdrop_id) : null;
                             const isRenderPage = p.slots?.some(s => {
                                 const def = slotDefaults[s.id];
-                                return def?.scriptName === 'renders' || (s.tipo === 'imagem' && def?.mode === 'script');
+                                return def?.scriptName === 'renders';
                             });
 
                             const n = isRenderPage ? (renderCount || 1) : 1;
