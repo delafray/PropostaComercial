@@ -205,6 +205,7 @@ export default function TemplateManager() {
 
     const [generatingVisualizacao, setGeneratingVisualizacao] = useState<string | null>(null);
     const [resyncingId, setResyncingId] = useState<string | null>(null);
+    const [addingSlotsId, setAddingSlotsId] = useState<string | null>(null);
 
     useEffect(() => { loadAll(); }, []);
 
@@ -481,6 +482,60 @@ export default function TemplateManager() {
         finally { setResyncingId(null); }
     }
 
+    async function handleAddSlots(mc: TemplateMascara, file: File) {
+        const id = mc.id;
+        const existingPaginas: PaginaConfig[] = editingPaginas[id] ?? mc.paginas_config ?? [];
+        try {
+            setAddingSlotsId(id); setError('');
+            const novaPaginas = await parseMascaraPdf(file, () => { });
+
+            // First pass: calculate what would be added
+            let totalAdded = 0;
+            const pageChanges: string[] = [];
+            existingPaginas.forEach((existingPage: PaginaConfig, pageIdx: number) => {
+                const newPage = novaPaginas[pageIdx];
+                if (!newPage) return;
+                const existingCount = existingPage.slots?.length ?? 0;
+                const newCount = newPage.slots?.length ?? 0;
+                if (newCount > existingCount) {
+                    totalAdded += newCount - existingCount;
+                    pageChanges.push(`Página ${existingPage.pagina}: +${newCount - existingCount} slot(s) (${existingCount} → ${newCount})`);
+                }
+            });
+
+            if (totalAdded === 0) {
+                alert('Nenhum slot novo detectado. O novo PDF não tem mais slots que o atual em nenhuma página.');
+                return;
+            }
+
+            if (!confirm(`Slots a adicionar:\n${pageChanges.join('\n')}\n\nOs slots existentes e suas configurações serão preservados. O PDF da máscara também será atualizado.\n\nContinuar?`)) return;
+
+            // Second pass: build merged paginas
+            const mergedPaginas: PaginaConfig[] = existingPaginas.map((existingPage: PaginaConfig, pageIdx: number) => {
+                const newPage = novaPaginas[pageIdx];
+                if (!newPage) return existingPage;
+                const existingSlotList = existingPage.slots ?? [];
+                const newSlotList = newPage.slots ?? [];
+                const existingCount = existingSlotList.length;
+                if (newSlotList.length <= existingCount) return existingPage;
+                const extraSlots: SlotElemento[] = newSlotList.slice(existingCount).map((s: SlotElemento, i: number) => ({
+                    ...s,
+                    id: `s${existingPage.pagina}_${existingCount + i + 1}`,
+                    nome: `slot_${existingCount + i + 1}`,
+                }));
+                return { ...existingPage, slots: [...existingSlotList, ...extraSlots] };
+            });
+
+            const newUrl = await templateService.updateMascaraPdf(id, mc.url_mascara_pdf, file);
+            await templateService.updateMascaraPaginas(id, mergedPaginas);
+            setMascaras((prev: TemplateMascara[]) =>
+                prev.map((m: TemplateMascara) => m.id === id ? { ...m, url_mascara_pdf: newUrl, paginas_config: mergedPaginas } : m)
+            );
+            setEditingPaginas((prev: Record<string, PaginaConfig[]>) => ({ ...prev, [id]: mergedPaginas }));
+        } catch (e: unknown) { setError((e as Error).message); }
+        finally { setAddingSlotsId(null); }
+    }
+
     async function handleDeleteReferencia(id: string, url: string) {
         if (!confirm('Excluir esta isca?')) return;
         try { await templateService.deleteReferencia(id, url); await loadAll(); }
@@ -728,6 +783,13 @@ export default function TemplateManager() {
                                                             <input type="file" accept="application/pdf" className="hidden"
                                                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) handleResyncCoordenadas(mc, f); e.target.value = ''; }} />
                                                         </label>
+                                                        <label
+                                                            className={`cursor-pointer flex items-center gap-1 text-[11px] font-semibold px-2 py-1.5 rounded border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors ${addingSlotsId === mc.id ? 'opacity-50 pointer-events-none' : ''}`}
+                                                            title="Carrega novo PDF e adiciona apenas os slots extras (novos) no final de cada página, sem renomear ou perder os slots existentes">
+                                                            {addingSlotsId === mc.id ? '⌛ Expandindo...' : '➕ Expandir'}
+                                                            <input type="file" accept="application/pdf" className="hidden"
+                                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) handleAddSlots(mc, f); e.target.value = ''; }} />
+                                                        </label>
                                                         <button
                                                             onClick={() => handleDetectarSlots(mc)}
                                                             disabled={!!detectProgress[mc.id] && detectProgress[mc.id]!.pct < 100}
@@ -799,22 +861,20 @@ export default function TemplateManager() {
                                                                                     <span className="w-5 h-5 bg-white text-orange-600 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0">
                                                                                         {p.pagina}
                                                                                     </span>
-                                                                                    <span className="text-xs font-semibold text-white flex-1">
+                                                                                    <span className="text-xs font-semibold text-white shrink-0">
                                                                                         Página {p.pagina}
                                                                                     </span>
-                                                                                    <span className="text-[10px] text-orange-100">
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        value={editingPaginas[mc.id]?.[idx]?.descricao ?? p.descricao}
+                                                                                        onChange={e => handlePaginaChange(mc.id, idx, e.target.value)}
+                                                                                        placeholder="Nome da página..."
+                                                                                        className="flex-1 min-w-0 bg-orange-400 text-white text-xs font-medium placeholder-orange-200 px-2 py-0.5 rounded focus:outline-none focus:bg-orange-300 focus:placeholder-orange-100"
+                                                                                    />
+                                                                                    <span className="text-[10px] text-orange-100 shrink-0">
                                                                                         {slots.length} slot{slots.length !== 1 ? 's' : ''}
                                                                                     </span>
                                                                                 </div>
-
-                                                                                {/* Textarea de comportamento */}
-                                                                                <textarea
-                                                                                    value={editingPaginas[mc.id]?.[idx]?.descricao ?? p.descricao}
-                                                                                    onChange={e => handlePaginaChange(mc.id, idx, e.target.value)}
-                                                                                    placeholder={`Descreva o comportamento da página ${p.pagina}...\nEx: Capa com logo do cliente, nome do evento e data.`}
-                                                                                    rows={3}
-                                                                                    className="w-full px-3 py-2 text-xs text-gray-700 resize-none focus:outline-none focus:ring-1 focus:ring-orange-300 placeholder-gray-300"
-                                                                                />
 
                                                                                 {/* ── Fundo da página (gerente configura) ── */}
                                                                                 <div className="border-t border-gray-100 px-3 py-2 bg-white">
