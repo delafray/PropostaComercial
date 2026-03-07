@@ -260,7 +260,11 @@ export default function ConfiguracaoPage() {
                                     };
                                     const mode = def.mode ?? 'text';
                                     const isImagem = slot.tipo === 'imagem';
-                                    const showStyle = mode !== 'script' || (mode === 'script' && def.scriptName !== 'projeto' && def.scriptName !== 'imagem_estande');
+                                    // Painel completo só para modo texto/campo
+                                    const showStyle = mode !== 'script';
+                                    // Scripts que aceitam estilo tipográfico (não são imagem)
+                                    const TEXT_SCRIPTS = new Set(['hoje', 'cliente_evento', 'mes_ano', '01', 'altura_estande', 'projetista']);
+                                    const showScriptStyle = mode === 'script' && TEXT_SCRIPTS.has(def.scriptName ?? '');
 
                                     return (
                                         <div key={slot.id} className="px-4 py-3">
@@ -340,6 +344,52 @@ export default function ConfiguracaoPage() {
                                                             <p className="text-[11px] text-blue-600 px-1">{sc.description}</p>
                                                         ) : null;
                                                     })()}
+
+                                                    {/* Mini-painel de tipografia para scripts de texto */}
+                                                    {showScriptStyle && (
+                                                        <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mt-2 pt-2 border-t border-blue-100">
+
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[10px] text-gray-500 font-medium select-none">Tam.</span>
+                                                                <input
+                                                                    type="number" min={6} max={99}
+                                                                    value={def.fontSize}
+                                                                    onChange={e => update(slot.id, { fontSize: Number(e.target.value) })}
+                                                                    className="w-12 border border-gray-300 rounded px-1 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                                                                />
+                                                                <span className="text-[10px] text-gray-400 select-none">pt</span>
+                                                            </div>
+
+                                                            <div className="w-px h-5 bg-gray-200 shrink-0" />
+
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[10px] text-gray-500 font-medium select-none">Cor</span>
+                                                                <input
+                                                                    type="color"
+                                                                    value={def.color ?? '#000000'}
+                                                                    onChange={e => update(slot.id, { color: e.target.value })}
+                                                                    className="w-8 h-7 rounded cursor-pointer border border-gray-300 p-0.5 bg-white"
+                                                                />
+                                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                                    {(def.color ?? '#000000').toUpperCase()}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="w-px h-5 bg-gray-200 shrink-0" />
+
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[10px] text-gray-500 font-medium select-none">Fonte</span>
+                                                                <select
+                                                                    value={def.fontFamily ?? 'helvetica'}
+                                                                    onChange={e => update(slot.id, { fontFamily: e.target.value })}
+                                                                    className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400 bg-white"
+                                                                >
+                                                                    {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                                                </select>
+                                                            </div>
+
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
 

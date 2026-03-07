@@ -770,7 +770,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                 let currentY = slot.y_mm;
                 const lineHeight = defaultSize * 0.35;
-                const lineSpacing = 0.5;
+                const lineSpacing = 0.1;
                 const maxY = slot.y_mm + slot.h_mm;
 
                 const X_START = slot.x_mm;
@@ -828,11 +828,11 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                     } else {
                         // Categoria (bold)
-                        if (currentY > slot.y_mm) currentY += (lineHeight * 0.8);
+                        if (currentY > slot.y_mm) currentY += (lineHeight * 0.4);
                         if (currentY > maxY - lineHeight) break;
 
                         await drawCol(line, COL_DESC, currentY + lineHeight, 'bold', defaultSize);
-                        currentY += lineHeight + (lineSpacing * 2);
+                        currentY += lineHeight + lineSpacing;
                     }
                 }
 
