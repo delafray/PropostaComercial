@@ -118,19 +118,6 @@ export async function parseBriefingPdf(file: File): Promise<BriefingData> {
         extract(text, /Forma\s+Construtiva\s+(.+?)(?=\s+Fechamento|\s+m²\s|\s*$)/i) ??
         null;
 
-    const diag = [
-        `numero="${numero}"`,
-        `evento="${evento}"`,
-        `local="${local}"`,
-        `data="${data}"`,
-        `cliente="${cliente}"`,
-        `contato="${contato}"`,
-        `comercial="${comercial}"`,
-        `numeroStand="${numeroStand}"`,
-        `areaStand="${areaStand}"`,
-        `formaConstrutiva="${formaConstrutiva}"`,
-    ].join('\n');
-
     const result: any = {
         cliente,
         evento,
@@ -144,8 +131,6 @@ export async function parseBriefingPdf(file: File): Promise<BriefingData> {
         numeroStand,
         areaStand,
         formaConstrutiva,
-        _tokens: tokens,
-        _diag:   diag,
     };
 
     return result as BriefingData;

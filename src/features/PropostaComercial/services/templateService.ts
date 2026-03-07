@@ -24,7 +24,8 @@ export const templateService = {
         if (!publicUrl) return;
         const parts = publicUrl.split(`${BUCKET}/`);
         if (parts.length > 1) {
-            await supabase.storage.from(BUCKET).remove([parts[1]]);
+            const { error } = await supabase.storage.from(BUCKET).remove([parts[1]]);
+            if (error) console.warn(`[templateService] Falha ao deletar arquivo do storage: ${parts[1]}`, error.message);
         }
     },
 

@@ -35,8 +35,12 @@ async function ttfToBase64(file: string): Promise<string> {
     if (!res.ok) throw new Error(`Fonte não encontrada: /fonts/${file} (${res.status})`);
     const buffer = await res.arrayBuffer();
     const bytes = new Uint8Array(buffer);
+    // Chunks de 8KB evitam stack overflow no spread e são O(n) ao contrário do loop char-por-char
+    const CHUNK = 8192;
     let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
     const b64 = btoa(binary);
     _b64Cache.set(file, b64);
     return b64;

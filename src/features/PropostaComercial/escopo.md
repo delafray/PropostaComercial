@@ -2,6 +2,22 @@
 
 ---
 
+## ✅ ÚLTIMA TAREFA CONCLUÍDA
+
+**Revisão de qualidade + 8 bug fixes (2026-03-07)**
+
+Fixes aplicados e testados:
+1. Memory leak: `revokeObjectURL` movido para `finally` em `GerarPdfPage.tsx`
+2. Campos debug `_tokens`/`_diag` removidos de `briefingParser.ts` (não vazam mais pro banco)
+3. Null guard em `prefService.ts` — `getUser()` não explode mais se `data` for null
+4. Log de erro em `templateService.deleteFileByUrl` — falhas de storage agora visíveis no console
+5. Conversão TTF→base64 otimizada para O(n) com chunks de 8KB em `fontLoader.ts`
+6. Limite de 50 iterações no `do/while` de overflow do descritivo em `GerarPdfPage.tsx`
+7. Race condition em `propostaService.upsertProposta` — aceita `existingId` para skip do select
+8. Sort de renders com NaN corrigido em `projetoParser.ts` — arquivos sem número vão para o fim
+
+---
+
 ## 🤖 PROTOCOLO PARA IAs — LEIA ANTES DE QUALQUER COISA
 
 ### PRINCÍPIO FUNDAMENTAL: Quem Define os Slots é o Usuário

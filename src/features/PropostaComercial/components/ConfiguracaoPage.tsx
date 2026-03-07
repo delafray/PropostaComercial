@@ -280,6 +280,8 @@ export default function ConfiguracaoPage() {
                                     // Scripts que aceitam estilo tipográfico (não são imagem)
                                     const TEXT_SCRIPTS = new Set(['hoje', 'cliente_evento', 'mes_ano', '01', 'altura_estande', 'projetista', 'pv_texto', 'eletrica']);
                                     const showScriptStyle = mode === 'script' && TEXT_SCRIPTS.has(def.scriptName ?? '');
+                                    // Script 01 tem ciclo de cores próprio — omite bold/italic/align no painel
+                                    const scriptHasFullStyle = showScriptStyle && def.scriptName !== '01';
 
                                     return (
                                         <div key={slot.id} className="px-4 py-3 rounded-md border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50/40 transition-colors">
@@ -402,6 +404,35 @@ export default function ConfiguracaoPage() {
                                                                     {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                                                 </select>
                                                             </div>
+
+                                                            {scriptHasFullStyle && (
+                                                                <>
+                                                                    <div className="w-px h-5 bg-blue-100 shrink-0" />
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        {STYLE_OPTS.map(opt => (
+                                                                            <button
+                                                                                key={opt.value} type="button" title={opt.title}
+                                                                                onClick={() => update(slot.id, { fontStyle: opt.value })}
+                                                                                className={`w-7 h-7 rounded text-xs transition-colors select-none ${opt.value === 'bold' ? 'font-bold' : opt.value === 'italic' ? 'italic' : ''} ${def.fontStyle === opt.value ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                            >
+                                                                                {opt.label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                    <div className="w-px h-5 bg-blue-100 shrink-0" />
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        {ALIGN_OPTS.map(opt => (
+                                                                            <button
+                                                                                key={opt.value} type="button" title={opt.title}
+                                                                                onClick={() => update(slot.id, { align: opt.value })}
+                                                                                className={`w-7 h-7 rounded text-xs font-semibold transition-colors select-none ${def.align === opt.value ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                            >
+                                                                                {opt.label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </>
+                                                            )}
 
                                                         </div>
                                                     )}

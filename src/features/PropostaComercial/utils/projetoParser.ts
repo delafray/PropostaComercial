@@ -34,7 +34,11 @@ function extrairTamanho(filename: string): string | null {
  * "10.jpg" → 10, "09.jpg" → 9
  */
 function numeroRender(filename: string): number {
-    return parseInt(filename.split('.')[0], 10);
+    // Extrai apenas dígitos iniciais do nome (antes do primeiro ponto)
+    const match = filename.match(/^(\d+)\./);
+    const n = match ? parseInt(match[1], 10) : NaN;
+    // NaN → Infinity: arquivos sem número numérico vão para o final da lista
+    return isNaN(n) ? Infinity : n;
 }
 
 /**

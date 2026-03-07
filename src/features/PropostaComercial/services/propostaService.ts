@@ -45,25 +45,25 @@ export const propostaService = {
 
     /**
      * Salva a proposta única do sistema.
-     * Se já existe uma proposta, atualiza a mais recente.
-     * Se não existe, cria uma nova.
+     * Passe `existingId` sempre que o ID já for conhecido (evita race condition
+     * de leitura duplicada). Se `existingId` não for fornecido, busca a mais recente.
      */
     async upsertProposta(payload: {
         nome: string;
         mascara_id: string | null;
         dados: object;
-    }): Promise<Proposta> {
-        // Busca a mais recente
-        const { data: existentes } = await supabase
-            .from('pc_propostas')
-            .select('id')
-            .order('created_at', { ascending: false })
-            .limit(1);
+    }, existingId?: string): Promise<Proposta> {
+        // Se o ID já é conhecido, atualiza diretamente sem precisar fazer select
+        const idParaAtualizar = existingId ?? await (async () => {
+            const { data: existentes } = await supabase
+                .from('pc_propostas')
+                .select('id')
+                .order('created_at', { ascending: false })
+                .limit(1);
+            return existentes?.[0]?.id as string | undefined;
+        })();
 
-        const existente = existentes?.[0];
-
-        if (existente) {
-            // Atualiza
+        if (idParaAtualizar) {
             const { data, error } = await supabase
                 .from('pc_propostas')
                 .update({
@@ -72,13 +72,12 @@ export const propostaService = {
                     dados: payload.dados,
                     updated_at: new Date().toISOString(),
                 })
-                .eq('id', existente.id)
+                .eq('id', idParaAtualizar)
                 .select()
                 .single();
             if (error) throw new Error(error.message);
             return data as Proposta;
         } else {
-            // Cria
             return this.createProposta(payload);
         }
     },

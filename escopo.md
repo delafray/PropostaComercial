@@ -1,6 +1,24 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
+## ⏳ TAREFA EM ANDAMENTO
+**Feature: Botão "Expandir" — adicionar novos slots sem perder configurações existentes (TemplateManager.tsx)**
+- Novo botão ao lado de "Re-sync" no gerenciador de máscaras
+- Faz parse do novo PDF, compara contagem de slots por página
+- Para cada página com mais slots no novo PDF: appenda os extras no final da lista existente
+- IDs novos: `s{pag}_{existingCount+i+1}`, nomes: `slot_{existingCount+i+1}`
+- Substitui o PDF da máscara (novo URL)
+- Salva `paginas_config` atualizado no BD
+- ConfiguracaoPage e NovaPropostaPage detectam novos slots automaticamente (leem do BD)
+
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Fixes da 2ª análise backend-specialist (GerarPdfPage.tsx)**
+1. **CRÍTICO — Bug `remainingLines`:** declaração movida para DENTRO do `for (ri)` loop. Antes ficava fora → após ri=0, `remainingLines=[]` era truthy na ri=1 → todos os slots não-`'01'` eram pulados → páginas 2+ de propostas multi-render ficavam em branco.
+2. **CRÍTICO — `fontSizeMap` não chegava em `renderSecaoTexto`:** assinatura da função recebe `fontSizeMap`, `startSize` agora usa `fontSizeMap[slot.id] ?? slotDefaults...`. Wrappers `renderPvTexto` e `renderEletrica` passam `fontSizeMap`. Chamadas em `renderizarTextos` passam `fontSizeMap`.
+3. **MODERADO — Guard `slot.h_mm <= 0`:** `renderSecaoTexto` retorna imediatamente se `slot.h_mm <= 0` (antes ficava em loop silencioso sem renderizar nada).
+4. **MODERADO — Warn seção não encontrada:** `buildTextMap` loga `console.warn` se `extrairSecaoMemorial` retornar vazio para `pv_texto` / `eletrica`.
+5. **MENOR — Ternário tautológico:** `slotDef?.mode ?? (slot.tipo === 'texto' ? 'text' : 'text')` → `slotDef?.mode ?? 'text'`.
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
 **Feature: Script `planta` — Planta Baixa com Análise OpenCV**
 - `ConfiguracaoPage`: adicionado `planta` ao `SCRIPT_OPTIONS`.
 - `GerarPdfPage`: gera 2 páginas por slot configurado com script `planta`:

@@ -8,7 +8,8 @@ import { supabase } from '../../../../services/supabaseClient';
 export const prefService = {
 
     async savePref(chave: string, valor: object): Promise<void> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data } = await supabase.auth.getUser();
+        const user = data?.user;
         if (!user) throw new Error('Usuário não autenticado');
 
         const { error } = await supabase
@@ -26,7 +27,8 @@ export const prefService = {
     },
 
     async loadPref(chave: string): Promise<object | null> {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
         if (!user) return null;
 
         const { data, error } = await supabase

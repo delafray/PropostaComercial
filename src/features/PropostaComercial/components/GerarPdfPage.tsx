@@ -698,7 +698,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                 for (const slot of pageConfig.slots ?? []) {
                     const slotDef = slotDefaults[slot.id];
-                    const mode = slotDef?.mode ?? (slot.tipo === 'texto' ? 'text' : 'text');
+                    const mode = slotDef?.mode ?? 'text';
 
                     if (mode === 'script') {
                         if (slotDef?.scriptName === 'hoje') {
@@ -719,9 +719,13 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         } else if (slotDef?.scriptName === 'projetista') {
                             map[slot.nome] = nomeProjetista;
                         } else if (slotDef?.scriptName === 'pv_texto') {
-                            map[slot.nome] = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'impressão digital');
+                            const pvSec = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'impressão digital');
+                            if (!pvSec) console.warn('[pv_texto] Seção "impressão digital" não encontrada no memorial.');
+                            map[slot.nome] = pvSec;
                         } else if (slotDef?.scriptName === 'eletrica') {
-                            map[slot.nome] = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'elétrica');
+                            const elSec = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'elétrica');
+                            if (!elSec) console.warn('[eletrica] Seção "elétrica" não encontrada no memorial.');
+                            map[slot.nome] = elSec;
                         }
                         // script 'projeto' é tratado no loop de páginas (imagem), não aqui
                         continue;
@@ -905,8 +909,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             // numCols = quantas colunas "curtas" antes da descrição
             // pv_texto: 3 (ID, qty, unit) | eletrica: 2 (qty, unit)
-            async function renderSecaoTexto(doc: jsPDF, text: string, slot: SlotElemento, titulo: string, numCols: number = 2): Promise<void> {
-                if (!text) return;
+            async function renderSecaoTexto(doc: jsPDF, text: string, slot: SlotElemento, titulo: string, numCols: number = 2, fontSizeMap: Record<string, number> = {}): Promise<void> {
+                if (!text || slot.h_mm <= 0) return;
                 const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
                 const partLines = rawLines.map(l => l.split('\t').map(p => p.trim()).filter(Boolean));
 
@@ -915,7 +919,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
                 const lineSpacing = 0.1;
                 const itemGap = 0.7;
-                const startSize: number = slotDefaults[slot.id]?.fontSize ?? 7;
+                const startSize: number = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? 7;
                 const minSize = 5;
                 const gap3pt = 3 * (25.4 / 72);
 
@@ -1019,12 +1023,12 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 }
             }
 
-            async function renderPvTexto(doc: jsPDF, text: string, slot: SlotElemento): Promise<void> {
-                await renderSecaoTexto(doc, text, slot, 'Programação Visual', 3);
+            async function renderPvTexto(doc: jsPDF, text: string, slot: SlotElemento, fontSizeMap: Record<string, number> = {}): Promise<void> {
+                await renderSecaoTexto(doc, text, slot, 'Programação Visual', 3, fontSizeMap);
             }
 
-            async function renderEletrica(doc: jsPDF, text: string, slot: SlotElemento): Promise<void> {
-                await renderSecaoTexto(doc, text, slot, 'Elétrica', 2);
+            async function renderEletrica(doc: jsPDF, text: string, slot: SlotElemento, fontSizeMap: Record<string, number> = {}): Promise<void> {
+                await renderSecaoTexto(doc, text, slot, 'Elétrica', 2, fontSizeMap);
             }
 
             // ── Renderizar textos ─────────────────────────────────────────────
@@ -1052,12 +1056,12 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     }
 
                     if (slotDef?.scriptName === 'pv_texto') {
-                        await renderPvTexto(doc, text, slot);
+                        await renderPvTexto(doc, text, slot, fontSizeMap);
                         continue;
                     }
 
                     if (slotDef?.scriptName === 'eletrica') {
-                        await renderEletrica(doc, text, slot);
+                        await renderEletrica(doc, text, slot, fontSizeMap);
                         continue;
                     }
 
@@ -1177,10 +1181,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     ? Math.max(renderUrls.length, 1)
                     : plantaSlot ? (referenciasOCV.length > 0 ? 2 : 1) : 1;
 
-                let remainingLines: string[] | undefined = undefined;
-
                 for (let ri = 0; ri < timesToRepeat; ri++) {
+                    let remainingLines: string[] | undefined = undefined;
+                    let overflowGuard = 0;
                     do {
+                        if (++overflowGuard > 50) {
+                            console.warn('[GerarPDF] Limite de 50 páginas de overflow atingido — possível slot com altura zero.');
+                            break;
+                        }
                         setProgress(`Gerando ${cfgPagina.descricao || `Página ${cfgPagina.pagina}`}${projetoSlot && timesToRepeat > 1 ? ` (${ri + 1}/${timesToRepeat})` : ''}...`);
                         if (pageIndex > 0) doc.addPage();
 
@@ -1311,9 +1319,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 }
             }
 
-            // Libera a memória das URLs temporárias geradas localmente
-            renderUrls.forEach(url => URL.revokeObjectURL(url));
-
             setProgress('Finalizando...');
             const blob = doc.output('blob');
             const b = proposta?.dados?.briefing;
@@ -1334,6 +1339,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             setError(`Erro ao gerar PDF: ${e.message}`);
             setProgress('');
         } finally {
+            // Libera Object URLs sempre — mesmo se geração falhar no meio
+            renderUrls.forEach(url => URL.revokeObjectURL(url));
             setGenerating(false);
         }
     }
