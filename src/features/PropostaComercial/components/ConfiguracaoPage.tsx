@@ -93,6 +93,16 @@ export const SCRIPT_OPTIONS = [
         label: 'Planta Baixa',
         description: 'Insere a planta baixa do projeto (planta.jpg/png/svg da pasta). Gera 2 páginas: original + versão cinza claro com marcações automáticas das iscas OpenCV.',
     },
+    {
+        name: 'altura_estande',
+        label: 'Altura do Estande',
+        description: 'Insere a altura do estande extraída do nome do arquivo na pasta do projeto (ex: altura_3,50m.png → "3,50m").',
+    },
+    {
+        name: 'imagem_estande',
+        label: 'Imagem do Estande (com Cota)',
+        description: 'Insere o PNG de altura do estande (arquivo com padrão ex: altura_3,50m.png) cropado verticalmente + desenha cota arquitetural com o valor da altura. Só funciona com PNG.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
@@ -245,7 +255,7 @@ export default function ConfiguracaoPage() {
                                     };
                                     const mode = def.mode ?? 'text';
                                     const isImagem = slot.tipo === 'imagem';
-                                    const showStyle = mode !== 'script' || (mode === 'script' && def.scriptName !== 'projeto');
+                                    const showStyle = mode !== 'script' || (mode === 'script' && def.scriptName !== 'projeto' && def.scriptName !== 'imagem_estande');
 
                                     return (
                                         <div key={slot.id} className="px-4 py-3">

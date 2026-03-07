@@ -9,7 +9,7 @@ import PdfActionModal from './PdfActionModal';
 import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 import { prefService } from '../services/prefService';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
-import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg } from '../utils/fontLoader';
+import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +104,118 @@ async function getImageNaturalSize(file: File): Promise<{ w: number; h: number }
         img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não foi possível ler dimensões da planta')); };
         img.src = url;
     });
+}
+
+/**
+ * Script imagem_estande: carrega o PNG de altura do estande, cropa transparência
+ * topo/base, detecta borda esquerda do conteúdo visível e desenha cota arquitetural.
+ */
+async function renderImagemEstande(
+    doc: jsPDF,
+    slot: SlotElemento,
+    file: File,
+    tamanhoText: string,
+): Promise<void> {
+    // 1. Carrega o PNG em canvas para ler pixels
+    const originalCanvas = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth;
+            c.height = img.naturalHeight;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+            resolve(c);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem do estande')); };
+        img.src = url;
+    });
+
+    const ctx = originalCanvas.getContext('2d')!;
+    const W = originalCanvas.width;
+    const H = originalCanvas.height;
+    const px = ctx.getImageData(0, 0, W, H).data;
+
+    function rowHasContent(y: number): boolean {
+        for (let x = 0; x < W; x++) {
+            if (px[(y * W + x) * 4 + 3] > 10) return true;
+        }
+        return false;
+    }
+
+    function colHasContent(x: number): boolean {
+        for (let y = 0; y < H; y++) {
+            if (px[(y * W + x) * 4 + 3] > 10) return true;
+        }
+        return false;
+    }
+
+    // 2. Detecta crop vertical (topo/base)
+    let topRow = 0;
+    while (topRow < H - 1 && !rowHasContent(topRow)) topRow++;
+    let bottomRow = H - 1;
+    while (bottomRow > topRow && !rowHasContent(bottomRow)) bottomRow--;
+
+    const croppedH = bottomRow - topRow + 1;
+
+    // 3. Detecta borda esquerda do conteúdo visível (para posicionar a cota)
+    let leftCol = 0;
+    while (leftCol < W - 1 && !colHasContent(leftCol)) leftCol++;
+
+    // 4. Cria canvas cropado verticalmente (largura mantida)
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = W;
+    croppedCanvas.height = croppedH;
+    croppedCanvas.getContext('2d')!.drawImage(originalCanvas, 0, topRow, W, croppedH, 0, 0, W, croppedH);
+    const croppedB64 = croppedCanvas.toDataURL('image/png').split(',')[1];
+
+    // 5. Posiciona imagem no slot (contain, sem distorção)
+    const imgRegion = containInSlot(slot, W, croppedH);
+    doc.addImage(croppedB64, 'PNG', imgRegion.x, imgRegion.y, imgRegion.w, imgRegion.h, undefined, 'FAST');
+
+    // 6. Desenha cota arquitetural
+    if (!tamanhoText) return;
+
+    // Mapeia leftCol para mm dentro da região da imagem colocada
+    const leftContentX_mm = imgRegion.x + (leftCol / W) * imgRegion.w;
+
+    const COTA_OFFSET_MM = 4;   // distância da cota à borda visível da imagem (mm)
+    const TICK_LEFT_MM   = 1.5; // comprimento do traço à esquerda da linha (mm)
+    const TICK_RIGHT_MM  = 5;   // comprimento do traço à direita da linha, em direção à imagem (mm)
+
+    const cotaX      = leftContentX_mm - COTA_OFFSET_MM;
+    const cotaTop    = imgRegion.y;
+    const cotaBottom = imgRegion.y + imgRegion.h;
+
+    doc.setDrawColor(0, 174, 239);
+    doc.setLineWidth(0.3);
+
+    // Linha vertical
+    doc.line(cotaX, cotaTop, cotaX, cotaBottom);
+    // Traço horizontal superior (mais longo para a direita)
+    doc.line(cotaX - TICK_LEFT_MM, cotaTop, cotaX + TICK_RIGHT_MM, cotaTop);
+    // Traço horizontal inferior (mais longo para a direita)
+    doc.line(cotaX - TICK_LEFT_MM, cotaBottom, cotaX + TICK_RIGHT_MM, cotaBottom);
+
+    // Texto rotacionado 90° como vetor puro (sem texto real no PDF → compatível com CorelDraw)
+    const PT_MM = 25.4 / 72;
+    const textX = cotaX - 5 * PT_MM; // = cotaX - 5pt (~1.8mm à esquerda da linha)
+    // Correção vertical: baseline da fonte fica acima do centro visual → empurra +1mm para baixo
+    const textY = (cotaTop + cotaBottom) / 2 + 1;
+    await renderTextoVetor(doc, tamanhoText, textX, textY, 'helvetica', 'bold', 9, [0, 174, 239], 'center', 90);
+}
+
+/** Remove todos os elementos <image> do SVG via DOM (para a camada vetorial — imagens já estão no raster de baixo). */
+function svgSemImageElements(svgText: string): string {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(svgText, 'image/svg+xml');
+    const svgEl = xmlDoc.documentElement;
+    if (svgEl.querySelector('parsererror')) return svgText;
+    const imgs = Array.from(svgEl.querySelectorAll('image'));
+    if (!imgs.length) return svgText;
+    for (const img of imgs) img.remove();
+    return new XMLSerializer().serializeToString(svgEl);
 }
 
 /** Calcula posição/tamanho "contain" dentro do slot em mm (maior possível, sem distorção, centralizado). */
@@ -572,6 +684,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             map[slot.nome] = `${meses[agora.getMonth()]} | ${agora.getFullYear()}`;
                         } else if (slotDef?.scriptName === '01') {
                             map[slot.nome] = proposta?.dados?.memorial ?? '';
+                        } else if (slotDef?.scriptName === 'altura_estande') {
+                            map[slot.nome] = proposta?.dados?.pasta?.tamanhoEstande ?? '';
                         }
                         // script 'projeto' é tratado no loop de páginas (imagem), não aqui
                         continue;
@@ -801,8 +915,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     return def?.mode === 'script' && def?.scriptName === 'planta';
                 });
 
-                // Todos os outros slots (exceto projeto e planta)
-                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot && s !== plantaSlot);
+                // Detecta o slot configurado com o script 'imagem_estande'
+                const imagemEstandeSlot = (cfgPagina.slots ?? []).find(s => {
+                    const def = slotDefaults[s.id];
+                    return def?.mode === 'script' && def?.scriptName === 'imagem_estande';
+                });
+
+                // Todos os outros slots (exceto projeto, planta e imagem_estande)
+                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot && s !== plantaSlot && s !== imagemEstandeSlot);
 
                 // Repete 1× por render (projeto), 2× (planta: original + anotada se há refs OCV), ou 1× normal
                 const timesToRepeat = projetoSlot
@@ -856,20 +976,32 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                                     // Página A: planta original (contain)
                                     if (isSvg) {
                                         const svgText = await plantaFile.text();
-                                        const parser = new DOMParser();
-                                        const svgEl = parser.parseFromString(svgText, 'image/svg+xml').documentElement;
-                                        // Tenta extrair dims do viewBox para contain correto
-                                        const vb = svgEl.getAttribute('viewBox');
+
+                                        // Calcula região de contain pelo viewBox (mais preciso que pixel size para SVGs)
+                                        const parserTmp = new DOMParser();
+                                        const svgElTmp = parserTmp.parseFromString(svgText, 'image/svg+xml').documentElement;
+                                        const vb = svgElTmp.getAttribute('viewBox');
+                                        let svgRegion = region;
                                         if (vb) {
                                             const parts = vb.split(/[\s,]+/).map(parseFloat);
                                             if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
-                                                const svgRegion = containInSlot(plantaSlot, parts[2], parts[3]);
-                                                await svg2pdf(svgEl, doc, { x: svgRegion.x, y: svgRegion.y, width: svgRegion.w, height: svgRegion.h });
-                                            } else {
-                                                await svg2pdf(svgEl, doc, { x: region.x, y: region.y, width: region.w, height: region.h });
+                                                svgRegion = containInSlot(plantaSlot, parts[2], parts[3]);
                                             }
-                                        } else {
-                                            await svg2pdf(svgEl, doc, { x: region.x, y: region.y, width: region.w, height: region.h });
+                                        }
+
+                                        // Camada 1 (baixo): rasteriza o SVG completo → JPEG
+                                        // (canvas renderiza tudo, inclusive imagens embutidas)
+                                        const jpgRaster = await rasterizarSvg(svgText, svgRegion.w, svgRegion.h);
+                                        doc.addImage(jpgRaster, 'JPEG', svgRegion.x, svgRegion.y, svgRegion.w, svgRegion.h, undefined, 'FAST');
+
+                                        // Camada 2 (cima): SVG vetorial sem <image> por cima
+                                        // (imagens já estão no raster de baixo; aqui ficam só vetores nítidos)
+                                        const svgVetorial = preprocessarSvg(normalizarImagensSvg(inlinearCssSvg(svgSemImageElements(svgText))));
+                                        const svgEl = parserTmp.parseFromString(svgVetorial, 'image/svg+xml').documentElement;
+                                        try {
+                                            await svg2pdf(svgEl, doc, { x: svgRegion.x, y: svgRegion.y, width: svgRegion.w, height: svgRegion.h });
+                                        } catch {
+                                            // svg2pdf falhou — raster já cobre o conteúdo
                                         }
                                     } else {
                                         const { data, format } = await fileToBase64(plantaFile);
@@ -899,6 +1031,19 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             }
                         }
 
+                        // Insere imagem do estande com cota arquitetural
+                        if (imagemEstandeSlot) {
+                            const arquivoEstande = arquivosLocais.find(f => /\d+[,.]\d+m/i.test(f.name));
+                            if (arquivoEstande && /\.png$/i.test(arquivoEstande.name)) {
+                                const tamanho = proposta?.dados?.pasta?.tamanhoEstande ?? '';
+                                try {
+                                    await renderImagemEstande(doc, imagemEstandeSlot, arquivoEstande, tamanho);
+                                } catch (e) {
+                                    console.warn('[imagem_estande] Falha ao renderizar:', e);
+                                }
+                            }
+                        }
+
                         // Renderiza os outros slots normalmente
                         remainingLines = await renderizarTextos(otherSlots, textMap, isCapa, fsMap, remainingLines);
                         pageIndex++;
@@ -911,9 +1056,16 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             setProgress('Finalizando...');
             const blob = doc.output('blob');
-            const nome = proposta
-                ? `${proposta.nome.replace(/\s+/g, '_')}.pdf`
-                : `Proposta_${mascara.nome.replace(/\s+/g, '_')}.pdf`;
+            const b = proposta?.dados?.briefing;
+            const nomeCliente = (b?.cliente ?? '').trim();
+            const nomeEvento  = (b?.evento ?? '').trim();
+            const numero      = (b?.numero ?? '').trim();
+            const partes = [nomeCliente, nomeEvento, numero].filter(Boolean);
+            const nome = partes.length > 0
+                ? `${partes.join(' - ')}.pdf`
+                : proposta
+                    ? `${proposta.nome.replace(/\s+/g, '_')}.pdf`
+                    : `Proposta_${mascara.nome.replace(/\s+/g, '_')}.pdf`;
             setPdfBlob(blob);
             setPdfName(nome);
             setProgress('');

@@ -314,7 +314,11 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                         ...dadosExistentes,
                         ...(briefing ? { briefing } : {}),
                         ...(memorial ? { memorial } : {}),
-                        pasta: { nome: nomePasta, arquivos: files.map(f => f.name) },
+                        pasta: {
+                            nome: nomePasta,
+                            arquivos: files.map(f => f.name),
+                            ...(parsed.tamanhoEstande ? { tamanhoEstande: parsed.tamanhoEstande.replace('.', ',') + 'm' } : {}),
+                        },
                     },
                 });
             } catch { /* silencioso */ }
@@ -420,6 +424,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                 nome: pastaName,
                 maquina_id: getMaquinaId(),
                 arquivos: todosArquivos,
+                ...(projeto.tamanhoEstande ? { tamanhoEstande: projeto.tamanhoEstande.replace('.', ',') + 'm' } : {}),
             } : null;
 
             setUploadProgress('Salvando...');
@@ -656,7 +661,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                             <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.tamanhoEstande ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
                                 <span className="text-base shrink-0">{projeto.tamanhoEstande ? '✅' : '⬜'}</span>
                                 <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">Tamanho do Estande</p>
+                                    <p className="font-semibold text-gray-700">Altura do Estande</p>
                                     <p className={`truncate mt-0.5 ${projeto.tamanhoEstande ? 'text-emerald-700 font-bold' : 'text-gray-400 italic'}`}>
                                         {projeto.tamanhoEstande ? `${projeto.tamanhoEstande}m` : 'Não detectado'}
                                         {projeto.arquivoTamanho && <span className="text-gray-400 font-normal ml-1">({projeto.arquivoTamanho.name})</span>}

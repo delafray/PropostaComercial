@@ -75,5 +75,36 @@ Este documento é a referência oficial de todos os scripts usados nos slots. Pa
 
 ---
 
+## SCRIPT: `altura_estande`
+
+- **Objetivo:** Insere a altura do estande extraída do nome de arquivo na pasta do projeto.
+- **Fonte dos dados:** `proposta.dados.pasta.tamanhoEstande` — salvo automaticamente ao selecionar/trocar/reabrir a pasta.
+- **Detecção:** Qualquer arquivo cujo nome contenha o padrão `\d+[,.]\d+m` (ex: `altura_3,50m.png`).
+- **Formato:** `"3,50m"` (vírgula BR + sufixo m).
+- **Fallback:** Vazio se nenhum arquivo com o padrão for encontrado na pasta.
+- **Modo:** Texto (suporta cor, fonte, alinhamento).
+
+---
+
+## SCRIPT: `imagem_estande` (PNG com Cota Arquitetural)
+
+- **Objetivo:** Insere o arquivo PNG de altura do estande no slot, cropado verticalmente, com cota arquitetural desenhada à esquerda.
+- **Fonte dos dados:**
+  - Imagem: arquivo local cujo nome contenha padrão `\d+[,.]\d+m` (ex: `altura_3,50m.png`).
+  - Texto da cota: `proposta.dados.pasta.tamanhoEstande` (ex: `"3,50m"`).
+- **Requisito:** Só funciona com **PNG**. Se o arquivo não for PNG, o slot fica vazio silenciosamente.
+- **Processamento:**
+  1. Lê pixels via canvas.
+  2. **Crop vertical:** Remove linhas de topo e base totalmente transparentes (alpha ≤ 10). Largura mantida.
+  3. Insere a imagem cropada no slot (`containInSlot` — sem distorção).
+- **Cota arquitetural:**
+  - Detecta a **primeira coluna com pixel visível** (ignora transparência lateral esquerda).
+  - Linha vertical azul (`#00AEEF`) a `4mm` à esquerda do conteúdo visível.
+  - Traços horizontais (topo/base) de `3mm`.
+  - Texto `tamanhoEstande` rotacionado 90°, centralizado na linha.
+- **Modo:** Sem controles de estilo (ocultados quando ativo).
+
+---
+
 ## Como pedir alterações:
 Basta dizer: *"No script **projeto**, quero que a imagem seja centralizada no slot"* ou *"Crie um novo script chamado X que faça Y"*.
