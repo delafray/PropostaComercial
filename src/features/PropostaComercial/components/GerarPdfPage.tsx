@@ -785,6 +785,10 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                 // Paleta de acento para títulos de categoria — cicla entre cores harmônicas
                 const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+                // Cor suave para coluna de ID: clareada se texto escuro, escurecida se texto claro
+                const idColor: [number, number, number] = luminance < 128
+                    ? [Math.round(r + (255 - r) * 0.45), Math.round(g + (255 - g) * 0.45), Math.round(b + (255 - b) * 0.45)]
+                    : [Math.round(r * 0.55), Math.round(g * 0.55), Math.round(b * 0.55)];
                 const accentPalette: Array<[number, number, number]> = luminance < 128
                     ? [ // texto escuro → acentos ricos/densos
                         [29,  78, 216],  // blue-700
@@ -831,7 +835,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     }
                 }
 
-                const COL_QTD  = X_START + (maxW0 > 0 ? maxW0 + gap6pt : 0);
+                const gap9pt = 9 * (25.4 / 72);
+                const COL_QTD  = X_START + (maxW0 > 0 ? maxW0 + gap9pt : 0); // 9pt após ID
                 const COL_UNID = COL_QTD  + (maxW1 > 0 ? maxW1 + gap6pt : 0);
                 const COL_DESC = COL_UNID + (maxW2 > 0 ? maxW2 + gap6pt : 0);
                 const maxDescW = slot.x_mm + slot.w_mm - COL_DESC - 1;
@@ -859,7 +864,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         }
 
                         const lineY = currentY + lineHeight;
-                        if (parts[0]) await drawCol(parts[0], X_START, lineY, 'normal', defaultSize - 1);
+                        if (parts[0]) await drawCol(parts[0], X_START, lineY, 'normal', defaultSize - 1, idColor);
                         if (parts[1]) await drawCol(parts[1], COL_QTD,  lineY, 'normal', defaultSize - 1);
                         if (parts[2]) await drawCol(parts[2], COL_UNID, lineY, 'normal', defaultSize - 1);
 
