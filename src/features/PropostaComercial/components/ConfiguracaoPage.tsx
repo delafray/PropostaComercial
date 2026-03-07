@@ -108,6 +108,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Projetista',
         description: 'Insere o nome do projetista responsável cadastrado no perfil do usuário logado.',
     },
+    {
+        name: 'programacao_visual',
+        label: 'Programação Visual',
+        description: 'Insere renders do projeto neste slot e em outros slots vazios de tamanho similar na mesma página. Ordena pelo nome do arquivo (menor número primeiro).',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
@@ -248,7 +253,7 @@ export default function ConfiguracaoPage() {
                                 </span>
                             </div>
 
-                            <div className="divide-y divide-gray-100">
+                            <div className="flex flex-col gap-2 p-3">
                                 {allSlots.map((slot: SlotElemento) => {
                                     const fullName = `pag_${pageNum}-${slot.nome}`;
                                     const def = defaults[slot.id] ?? {
@@ -267,7 +272,7 @@ export default function ConfiguracaoPage() {
                                     const showScriptStyle = mode === 'script' && TEXT_SCRIPTS.has(def.scriptName ?? '');
 
                                     return (
-                                        <div key={slot.id} className="px-4 py-3">
+                                        <div key={slot.id} className="px-4 py-3 rounded-md border-2 border-gray-300 hover:border-orange-400 hover:bg-orange-50/40 transition-colors">
 
                                             {/* Linha 1: nome do slot + seletor de modo */}
                                             <div className="flex items-start justify-between gap-3 mb-2.5">

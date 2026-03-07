@@ -765,6 +765,25 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const configColor = slotDefaults[slot.id]?.color;
                 const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
 
+                // Paleta de acento para títulos de categoria — cicla entre cores harmônicas
+                const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+                const accentPalette: Array<[number, number, number]> = luminance < 128
+                    ? [ // texto escuro → acentos ricos/densos
+                        [29,  78, 216],  // blue-700
+                        [21, 128,  61],  // green-700
+                        [185, 28,  28],  // red-700
+                        [180, 83,   9],  // amber-700
+                        [15, 118, 110],  // teal-700
+                    ]
+                    : [ // texto claro → acentos suaves/pastel
+                        [147, 197, 253], // blue-300
+                        [134, 239, 172], // green-300
+                        [252, 165, 165], // red-300
+                        [252, 211,  77], // amber-300
+                        [103, 232, 249], // cyan-300
+                    ];
+                let categoryIndex = 0;
+
                 const defaultSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
                 const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
 
@@ -783,12 +802,12 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const sizeMmNormal = (defaultSize - 1) * (25.4 / 72);
                 const maxDescW = slot.w_mm - (COL_DESC - X_START) - 2;
 
-                async function drawCol(text: string, x: number, y: number, style: 'normal' | 'bold', size: number) {
-                    const ok = await renderTextoVetor(doc, text, x, y, configFontFamily, style, size, [r, g, b]);
+                async function drawCol(text: string, x: number, y: number, style: 'normal' | 'bold', size: number, color: [number, number, number] = [r, g, b]) {
+                    const ok = await renderTextoVetor(doc, text, x, y, configFontFamily, style, size, color);
                     if (!ok) {
                         doc.setFontSize(size);
                         doc.setFont(configFontFamily, style);
-                        doc.setTextColor(r, g, b);
+                        doc.setTextColor(color[0], color[1], color[2]);
                         doc.text(text, x, y);
                     }
                 }
@@ -810,14 +829,16 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         if (parts[1]) await drawCol(parts[1], COL_QTD,  lineY, 'normal', defaultSize - 1);
                         if (parts[2]) await drawCol(parts[2], COL_UNID, lineY, 'normal', defaultSize - 1);
 
-                        if (parts[3]) {
+                        const descText = parts.slice(3).join('   ');
+                        if (descText) {
                             // Word-wrap com métricas reais da fonte
                             const descLines = fontVetor
-                                ? wrapTextoMm(fontVetor, parts[3], maxDescW, sizeMmNormal)
-                                : [parts[3]];
+                                ? wrapTextoMm(fontVetor, descText, maxDescW, sizeMmNormal)
+                                : [descText];
                             for (let dl = 0; dl < descLines.length; dl++) {
                                 const descY = lineY + dl * (lineHeight + lineSpacing);
-                                if (descY > maxY - lineHeight) break;
+                                // dl === 0: sempre renderiza junto com ID/QTD/UNID (já desenhados sem checagem)
+                                if (dl > 0 && descY > maxY - lineHeight) break;
                                 await drawCol(descLines[dl], COL_DESC, descY, 'normal', defaultSize - 1);
                             }
                             // Avança pelo número de linhas da descrição
@@ -827,11 +848,13 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         currentY += lineHeight + lineSpacing;
 
                     } else {
-                        // Categoria (bold)
+                        // Categoria (bold) — cor ciclada da paleta de acento
                         if (currentY > slot.y_mm) currentY += (lineHeight * 0.4);
                         if (currentY > maxY - lineHeight) break;
 
-                        await drawCol(line, COL_DESC, currentY + lineHeight, 'bold', defaultSize);
+                        const titleColor = accentPalette[categoryIndex % accentPalette.length];
+                        categoryIndex++;
+                        await drawCol(line, COL_DESC, currentY + lineHeight, 'bold', defaultSize, titleColor);
                         currentY += lineHeight + lineSpacing;
                     }
                 }
@@ -939,8 +962,40 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     return def?.mode === 'script' && def?.scriptName === 'imagem_estande';
                 });
 
-                // Todos os outros slots (exceto projeto, planta e imagem_estande)
-                const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot && s !== plantaSlot && s !== imagemEstandeSlot);
+                // Detecta o slot configurado com o script 'programacao_visual'
+                const pvSlot = (cfgPagina.slots ?? []).find(s => {
+                    const def = slotDefaults[s.id];
+                    return def?.mode === 'script' && def?.scriptName === 'programacao_visual';
+                });
+
+                // Constrói mapa slotId → renderUrl para o script programacao_visual
+                // O pvSlot âncora; slots vazios de tamanho similar na mesma página recebem renders subsequentes
+                const pvMap = new Map<string, string>();
+                const pvClaimedIds = new Set<string>();
+                if (pvSlot && renderUrls.length > 0) {
+                    const TOL = 10; // mm — tolerância de dimensão
+                    const similarEmpty = (cfgPagina.slots ?? []).filter(s => {
+                        if (s.id === pvSlot.id) return false;
+                        const def = slotDefaults[s.id];
+                        const isEmpty = !def || (def.mode !== 'script' && (!def.value));
+                        return isEmpty
+                            && Math.abs(s.w_mm - pvSlot.w_mm) <= TOL
+                            && Math.abs(s.h_mm - pvSlot.h_mm) <= TOL;
+                    });
+                    const allPv = [pvSlot, ...similarEmpty]
+                        .sort((a, b) => a.y_mm !== b.y_mm ? a.y_mm - b.y_mm : a.x_mm - b.x_mm);
+                    allPv.forEach((s, i) => {
+                        if (i < renderUrls.length) {
+                            pvMap.set(s.id, renderUrls[i]);
+                            pvClaimedIds.add(s.id);
+                        }
+                    });
+                }
+
+                // Todos os outros slots (exceto projeto, planta, imagem_estande e programacao_visual)
+                const otherSlots = (cfgPagina.slots ?? []).filter(s =>
+                    s !== projetoSlot && s !== plantaSlot && s !== imagemEstandeSlot && !pvClaimedIds.has(s.id)
+                );
 
                 // Repete 1× por render (projeto), 2× (planta: original + anotada se há refs OCV), ou 1× normal
                 const timesToRepeat = projetoSlot
@@ -1059,6 +1114,18 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                                 } catch (e) {
                                     console.warn('[imagem_estande] Falha ao renderizar:', e);
                                 }
+                            }
+                        }
+
+                        // Insere imagens do script programacao_visual
+                        for (const [slotId, url] of pvMap.entries()) {
+                            const pvS = (cfgPagina.slots ?? []).find(s => s.id === slotId);
+                            if (!pvS) continue;
+                            try {
+                                const { data, format } = await fetchBase64(url);
+                                doc.addImage(data, format, pvS.x_mm, pvS.y_mm, pvS.w_mm, pvS.h_mm, undefined, 'FAST');
+                            } catch (e) {
+                                console.warn('[programacao_visual] Falha ao renderizar slot:', slotId, e);
                             }
                         }
 
