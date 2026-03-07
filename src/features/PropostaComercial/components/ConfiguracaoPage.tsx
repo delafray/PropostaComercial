@@ -103,6 +103,11 @@ export const SCRIPT_OPTIONS = [
         label: 'Imagem do Estande (com Cota)',
         description: 'Insere o PNG de altura do estande (arquivo com padrão ex: altura_3,50m.png) cropado verticalmente + desenha cota arquitetural com o valor da altura. Só funciona com PNG.',
     },
+    {
+        name: 'projetista',
+        label: 'Projetista',
+        description: 'Insere o nome do projetista responsável cadastrado no perfil do usuário logado.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────

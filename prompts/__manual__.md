@@ -106,4 +106,11 @@ Abaixo, explico de forma simples e livre de "tecnês" o que cada prompt guardado
 
 ---
 
+## 15. 📐 `PROMPT_15_ADICAO_CAMPO_PROJETISTA.md`
+**(Extensibilidade de Dados e Perfil)**
+**O que ele faz:** Ensina a IA a adicionar um novo campo de texto ("Projetista Responsável") em todo o ecossistema do aplicativo, desde a criação da coluna no Banco de Dados até o campo de digitação na tela de usuários.
+**Por que é genial:** Adicionar campos parece fácil, mas exige mexer em 4 lugares diferentes (Banco, Tipos, Serviço e Tela). Esse Blueprint garante que a IA faça a "cirurgia" completa sem esquecer de nenhum detalhe, mantendo o campo alinhado visualmente com o restante do sistema.
+
+---
+
 *(Toda vez que a IA criar um novo Prompt Mestre, ela está autorizada e instruída a atualizar este manual automaticamente para você!)*

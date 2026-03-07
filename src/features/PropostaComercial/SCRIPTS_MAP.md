@@ -106,5 +106,14 @@ Este documento é a referência oficial de todos os scripts usados nos slots. Pa
 
 ---
 
+## SCRIPT: `projetista`
+
+- **Objetivo:** Insere o nome do projetista responsável do usuário atualmente logado no sistema.
+- **Fonte dos dados:** Campo `projetista_responsavel` da tabela `users` no Supabase, filtrado pelo `id` do usuário autenticado.
+- **Fallback:** Se o campo estiver nulo/vazio ou ocorrer erro, o slot fica vazio silenciosamente.
+- **Modo:** Texto (suporta cor, fonte, alinhamento).
+
+---
+
 ## Como pedir alterações:
 Basta dizer: *"No script **projeto**, quero que a imagem seja centralizada no slot"* ou *"Crie um novo script chamado X que faça Y"*.

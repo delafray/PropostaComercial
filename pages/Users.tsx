@@ -17,11 +17,7 @@ const Users: React.FC = () => {
     // Temp User State
     const [showTempModal, setShowTempModal] = useState(false);
     const [tempExpiresAt, setTempExpiresAt] = useState('');
-    const [tempEdicaoId, setTempEdicaoId] = useState('');
-    const [edicoesAtivas, setEdicoesAtivas] = useState<{ id: string; titulo: string; data_inicio: string | null; data_fim: string | null }[]>([]);
     const [createdTempUser, setCreatedTempUser] = useState<{ user: User, passwordRaw: string } | null>(null);
-    const [existingTempForEdicao, setExistingTempForEdicao] = useState<User | null>(null);
-    const [confirmCreateAnother, setConfirmCreateAnother] = useState(false);
     const [whatsappCopied, setWhatsappCopied] = useState(false);
 
     // Form state
@@ -38,6 +34,7 @@ const Users: React.FC = () => {
     const [isActive, setIsActive] = useState(true);
     const [canManageTags, setCanManageTags] = useState(false);
     const [isProjetista, setIsProjetista] = useState(false);
+    const [projetista, setProjetista] = useState('');
     const [formError, setFormError] = useState('');
     const [formLoading, setFormLoading] = useState(false);
     const [backupLoading, setBackupLoading] = useState(false);
@@ -50,11 +47,6 @@ const Users: React.FC = () => {
 
     useEffect(() => {
         fetchUsers();
-        supabase
-            .from('eventos_edicoes')
-            .select('id, titulo, data_inicio, data_fim')
-            .order('titulo')
-            .then(({ data }) => setEdicoesAtivas((data as { id: string; titulo: string; data_inicio: string | null; data_fim: string | null }[]) || []));
     }, []);
 
     const fetchUsers = async () => {
@@ -89,6 +81,7 @@ const Users: React.FC = () => {
             setIsActive(user.isActive ?? true);
             setCanManageTags(user.canManageTags || false);
             setIsProjetista(user.isProjetista || false);
+            setProjetista(user.projetista || '');
             setPassword(''); // Password empty means no change
         } else {
             resetForm();
@@ -119,6 +112,7 @@ const Users: React.FC = () => {
                     isActive,
                     canManageTags,
                     isProjetista,
+                    projetista,
                     password: password || undefined
                 });
             } else {
@@ -126,7 +120,7 @@ const Users: React.FC = () => {
                 if (!password) {
                     throw new Error('Senha é obrigatória para novos usuários');
                 }
-                await authService.register(name, email, password, isAdmin, isVisitor, canManageTags, isProjetista);
+                await authService.register(name, email, password, isAdmin, isVisitor, canManageTags, isProjetista, projetista);
             }
 
             await fetchUsers();
@@ -140,14 +134,14 @@ const Users: React.FC = () => {
     };
 
     const handleCreateTempUser = async () => {
-        if (!tempExpiresAt || !tempEdicaoId) {
-            showAlert('Campos Obrigatórios', 'Selecione a edição e a data limite de acesso.', 'warning');
+        if (!tempExpiresAt) {
+            showAlert('Campo Obrigatório', 'Selecione a data limite de acesso.', 'warning');
             return;
         }
         setFormLoading(true);
         try {
-            const edicaoTitulo = edicoesAtivas.find(e => e.id === tempEdicaoId)?.titulo ?? '';
-            const result = await authService.createTempUser(new Date(tempExpiresAt), tempEdicaoId, edicaoTitulo);
+            const days = Math.ceil((new Date(tempExpiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            const result = await authService.createTempUser(days);
             setCreatedTempUser(result);
             await fetchUsers();
         } catch (err: any) {
@@ -167,6 +161,7 @@ const Users: React.FC = () => {
         setIsActive(true);
         setCanManageTags(false);
         setIsProjetista(false);
+        setProjetista('');
         setFormError('');
     };
 
@@ -257,10 +252,7 @@ const Users: React.FC = () => {
                     <Button variant="outline" className="flex-1 sm:flex-none justify-center px-3 py-2 text-[10px] sm:text-xs" onClick={() => {
                         setShowTempModal(true);
                         setCreatedTempUser(null);
-                        setTempEdicaoId('');
                         setTempExpiresAt('');
-                        setExistingTempForEdicao(null);
-                        setConfirmCreateAnother(false);
                     }}>
                         Gerar Temp.
                     </Button>
@@ -336,6 +328,17 @@ const Users: React.FC = () => {
                                 className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-600 focus:bg-white text-sm font-bold text-slate-800 p-3 outline-none transition-all"
                                 style={{ borderRadius: '0px' }}
                                 placeholder={editingId ? "Deixe em branco para manter a senha atual" : "Mínimo 4 caracteres"}
+                            />
+                        </div>
+
+                        <div className="space-y-1.5 focus-within:text-blue-600 transition-colors">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 inherit">Projetista Responsável</label>
+                            <input
+                                type="text"
+                                value={projetista}
+                                onChange={e => setProjetista(e.target.value)}
+                                className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-600 focus:bg-white text-sm font-bold text-slate-800 p-3 rounded-none outline-none transition-all"
+                                placeholder="Nome do projetista para este perfil"
                             />
                         </div>
                     </div>
@@ -627,7 +630,7 @@ const Users: React.FC = () => {
             </Card>
 
             {/* Modal de Usuário Temporário */}
-            <Modal isOpen={showTempModal} onClose={() => { setShowTempModal(false); setTempEdicaoId(''); setTempExpiresAt(''); setCreatedTempUser(null); setExistingTempForEdicao(null); setConfirmCreateAnother(false); }} title="Acesso Temporário">
+            <Modal isOpen={showTempModal} onClose={() => { setShowTempModal(false); setTempExpiresAt(''); setCreatedTempUser(null); }} title="Acesso Temporário">
                 {createdTempUser ? (
                     <div className="space-y-6">
                         {/* Header Minimalista */}
@@ -745,162 +748,24 @@ const Users: React.FC = () => {
                         </p>
 
                         <div className="space-y-1.5">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Edição do Evento</label>
-                            <select
-                                value={tempEdicaoId}
-                                onChange={e => {
-                                    const id = e.target.value;
-                                    setTempEdicaoId(id);
-                                    setConfirmCreateAnother(false);
-                                    if (id) {
-                                        const found = users.find((u: User) =>
-                                            u.isVisitor &&
-                                            u.isActive !== false &&
-                                            u.edicaoId === id &&
-                                            (!u.expiresAt || new Date(u.expiresAt) >= new Date())
-                                        ) ?? null;
-                                        setExistingTempForEdicao(found);
-                                    } else {
-                                        setExistingTempForEdicao(null);
-                                    }
-                                }}
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Data Limite de Acesso</label>
+                            <input
+                                type="date"
+                                value={tempExpiresAt}
+                                onChange={e => setTempExpiresAt(e.target.value)}
                                 className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-600 text-sm font-bold text-slate-800 p-3 rounded-none outline-none transition-all"
-                            >
-                                <option value="">Selecione uma edição...</option>
-                                {edicoesAtivas.map(ed => {
-                                    const fmtData = (d: string | null) => {
-                                        if (!d) return '';
-                                        const dt = new Date(d);
-                                        return `${String(dt.getUTCDate()).padStart(2, '0')}/${String(dt.getUTCMonth() + 1).padStart(2, '0')}`;
-                                    };
-                                    const periodo = ed.data_inicio
-                                        ? ed.data_fim
-                                            ? ` · ${fmtData(ed.data_inicio)}–${fmtData(ed.data_fim)}`
-                                            : ` · ${fmtData(ed.data_inicio)}`
-                                        : '';
-                                    return (
-                                        <option key={ed.id} value={ed.id}>{ed.titulo}{periodo}</option>
-                                    );
-                                })}
-                            </select>
+                            />
                         </div>
-
-                        {/* Aviso: já existe visitante ativo para esta edição */}
-                        {existingTempForEdicao && !confirmCreateAnother && (
-                            <div className="border-2 border-amber-300 bg-amber-50 p-4 space-y-4">
-                                {/* Cabeçalho do aviso */}
-                                <div className="flex items-start gap-2">
-                                    <span className="text-amber-500 text-lg leading-none flex-shrink-0">⚠️</span>
-                                    <div>
-                                        <p className="text-xs font-black text-amber-800 uppercase tracking-wide">Já existe um visitante ativo para esta edição</p>
-                                        <p className="text-[11px] text-amber-700 mt-0.5">O acesso abaixo já foi gerado anteriormente e ainda está válido.</p>
-                                    </div>
-                                </div>
-
-                                {/* Credenciais */}
-                                <div className="bg-white border border-amber-200 p-3 space-y-2 text-xs font-mono">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-slate-500 font-sans font-bold uppercase text-[10px]">Usuário:</span>
-                                        <div className="flex items-center gap-2">
-                                            <code className="text-slate-800 font-black">{existingTempForEdicao.email.replace('@temp.local', '')}</code>
-                                            <button onClick={() => { navigator.clipboard.writeText(existingTempForEdicao.email.replace('@temp.local', '')); showAlert('Copiado', 'Login copiado!', 'success'); }} className="text-[10px] text-blue-600 hover:underline font-sans">Copiar</button>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-slate-500 font-sans font-bold uppercase text-[10px]">Senha:</span>
-                                        <div className="flex items-center gap-2">
-                                            {existingTempForEdicao.tempPasswordPlain ? (
-                                                <>
-                                                    <code className="text-slate-800 font-black tracking-wider">{existingTempForEdicao.tempPasswordPlain}</code>
-                                                    <button onClick={() => { navigator.clipboard.writeText(existingTempForEdicao.tempPasswordPlain!); showAlert('Copiado', 'Senha copiada!', 'success'); }} className="text-[10px] text-blue-600 hover:underline font-sans">Copiar</button>
-                                                </>
-                                            ) : (
-                                                <span className="text-slate-400 italic font-sans text-[10px]">não disponível — crie novo acesso</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-slate-500 font-sans font-bold uppercase text-[10px]">Expira em:</span>
-                                        <code className="text-amber-700 font-black">{existingTempForEdicao.expiresAt ? new Date(existingTempForEdicao.expiresAt).toLocaleDateString('pt-BR') : '—'}</code>
-                                    </div>
-                                </div>
-
-                                {/* Botão principal: copiar tudo */}
-                                <div className="space-y-1">
-                                    <button
-                                        onClick={() => {
-                                            const login = existingTempForEdicao.email.replace('@temp.local', '');
-                                            const senha = existingTempForEdicao.tempPasswordPlain ?? '(não disponível)';
-                                            const expira = existingTempForEdicao.expiresAt ? new Date(existingTempForEdicao.expiresAt).toLocaleDateString('pt-BR') : '—';
-                                            const edicaoNome = edicoesAtivas.find(e => e.id === tempEdicaoId)?.titulo ?? '';
-                                            const msg = `*Acesso Temporário - Dbarros Rural*\n\nOlá! Segue seu acesso de visitante para *${edicaoNome}*:\n\n🔗 *Link:* https://dbarros.vercel.app/#/login\n👤 *Usuário:* ${login}\n🔑 *Senha:* ${senha}\n\n📅 *Válido até:* ${expira}\n\nAcesse para visualizar a planilha e atendimentos.`;
-                                            navigator.clipboard.writeText(msg);
-                                            setWhatsappCopied(true);
-                                            setTimeout(() => setWhatsappCopied(false), 4000);
-                                        }}
-                                        className={`w-full flex items-center justify-center gap-2 py-3 text-xs font-black text-white transition-colors ${whatsappCopied ? 'bg-green-500' : 'bg-slate-800 hover:bg-slate-950'}`}
-                                    >
-                                        {whatsappCopied ? (
-                                            <>
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                Copiado!
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                </svg>
-                                                Copiar texto para WhatsApp
-                                            </>
-                                        )}
-                                    </button>
-                                    <p className={`text-[10px] text-center font-bold animate-pulse transition-colors ${whatsappCopied ? 'text-green-600' : 'text-slate-500'}`}>
-                                        {whatsappCopied ? '✅ Texto copiado! Abra o WhatsApp e cole no contato que quiser.' : 'Clique para copiar. Depois abra o WhatsApp e cole a mensagem pronta.'}
-                                    </p>
-                                </div>
-
-                                {/* Ações secundárias */}
-                                <div className="border-t border-amber-200 pt-3 space-y-2">
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Ou escolha outra ação:</p>
-                                    <div className="flex gap-2 flex-wrap">
-                                        <button onClick={() => { setExistingTempForEdicao(null); setTempEdicaoId(''); }} className="flex-1 text-xs font-bold text-slate-600 hover:text-slate-900 px-3 py-2 border border-slate-300 hover:border-slate-500 transition-colors text-center">
-                                            OK, entendido
-                                        </button>
-                                        <button onClick={() => setConfirmCreateAnother(true)} className="flex-1 text-xs font-black text-white bg-amber-500 hover:bg-amber-600 px-3 py-2 transition-colors text-center">
-                                            Gerar novo acesso
-                                        </button>
-                                    </div>
-                                    <p className="text-[10px] text-slate-400 text-center">"Gerar novo acesso" cria um segundo visitante — o anterior continua ativo.</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Formulário de data — só aparece se não há conflito ou usuário confirmou criar outro */}
-                        {(!existingTempForEdicao || confirmCreateAnother) && tempEdicaoId && (
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Data Limite de Acesso</label>
-                                <input
-                                    type="date"
-                                    value={tempExpiresAt}
-                                    onChange={e => setTempExpiresAt(e.target.value)}
-                                    className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-600 text-sm font-bold text-slate-800 p-3 rounded-none outline-none transition-all"
-                                />
-                            </div>
-                        )}
 
                         <div className="pt-2 flex justify-end gap-3">
                             <Button variant="outline" onClick={() => setShowTempModal(false)}>Cancelar</Button>
-                            {(!existingTempForEdicao || confirmCreateAnother) && (
-                                <Button
-                                    onClick={handleCreateTempUser}
-                                    disabled={formLoading || !tempExpiresAt || !tempEdicaoId}
-                                    className="px-8"
-                                >
-                                    {formLoading ? 'Gerando...' : 'Gerar Acesso'}
-                                </Button>
-                            )}
+                            <Button
+                                onClick={handleCreateTempUser}
+                                disabled={formLoading || !tempExpiresAt}
+                                className="px-8"
+                            >
+                                {formLoading ? 'Gerando...' : 'Gerar Acesso'}
+                            </Button>
                         </div>
                     </div>
                 )}

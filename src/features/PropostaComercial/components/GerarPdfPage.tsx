@@ -8,6 +8,7 @@ import { TemplateMascara, TemplateBackdrop, PaginaConfig, SlotElemento, Proposta
 import PdfActionModal from './PdfActionModal';
 import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 import { prefService } from '../services/prefService';
+import { supabase } from '../../../../services/supabaseClient';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
 import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
 
@@ -661,6 +662,21 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             const autoMap = buildBriefingMap();
 
+            // Busca campo projetista do usuário logado (para script 'projetista')
+            let nomeProjetista = '';
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: userRow, error: userErr } = await supabase
+                        .from('users')
+                        .select('projetista')
+                        .eq('id', user.id)
+                        .maybeSingle();
+                    if (userErr) console.error('[projetista] erro Supabase:', userErr);
+                    nomeProjetista = userRow?.projetista ?? '';
+                }
+            } catch (e) { console.error('[projetista] exceção:', e); }
+
             function buildTextMap(pageConfig: PaginaConfig | null): Record<string, string> {
                 if (!pageConfig) return {};
                 const map: Record<string, string> = {};
@@ -686,6 +702,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             map[slot.nome] = proposta?.dados?.memorial ?? '';
                         } else if (slotDef?.scriptName === 'altura_estande') {
                             map[slot.nome] = proposta?.dados?.pasta?.tamanhoEstande ?? '';
+                        } else if (slotDef?.scriptName === 'projetista') {
+                            map[slot.nome] = nomeProjetista;
                         }
                         // script 'projeto' é tratado no loop de páginas (imagem), não aqui
                         continue;

@@ -203,6 +203,8 @@ export type Database = {
           is_visitor: boolean | null
           name: string
           password_hash: string
+          projetista: string | null
+          edicao_id: string | null
         }
         Insert: {
           can_manage_tags?: boolean | null
@@ -217,6 +219,8 @@ export type Database = {
           is_visitor?: boolean | null
           name: string
           password_hash: string
+          projetista?: string | null
+          edicao_id?: string | null
         }
         Update: {
           can_manage_tags?: boolean | null
@@ -231,6 +235,8 @@ export type Database = {
           is_visitor?: boolean | null
           name?: string
           password_hash?: string
+          projetista?: string | null
+          edicao_id?: string | null
         }
         Relationships: []
       }

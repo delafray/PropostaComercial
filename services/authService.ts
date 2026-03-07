@@ -26,6 +26,7 @@ export interface User {
     isTemp?: boolean;
     canManageTags: boolean;
     isProjetista: boolean;
+    projetista?: string;
 }
 
 // Utility functions for WebAuthn ArrayBuffer conversion (handles Base64 and Base64URL)
@@ -76,7 +77,7 @@ const base64ToBuffer = (data: any): ArrayBuffer => {
 
 export const authService = {
     // Register new user
-    register: async (name: string, email: string, password: string, isAdmin: boolean = false, isVisitor: boolean = false, canManageTags: boolean = false, isProjetista: boolean = false): Promise<User> => {
+    register: async (name: string, email: string, password: string, isAdmin: boolean = false, isVisitor: boolean = false, canManageTags: boolean = false, isProjetista: boolean = false, projetista: string = ''): Promise<User> => {
 
         // 1. Create user in Supabase Auth (Using non-persisting client to avoid session swap)
         const adminClient = getAdminClient();
@@ -100,7 +101,8 @@ export const authService = {
             is_visitor: isVisitor,
             is_active: true,
             can_manage_tags: canManageTags,
-            is_projetista: isProjetista
+            is_projetista: isProjetista,
+            projetista: projetista || null
         };
 
         const { data, error } = await supabase
@@ -176,7 +178,8 @@ export const authService = {
             expiresAt: profile.expires_at ?? undefined,
             isTemp: profile.is_temp ?? false,
             canManageTags: profile.can_manage_tags ?? false,
-            isProjetista: profile.is_projetista ?? false
+            isProjetista: profile.is_projetista ?? false,
+            projetista: profile.projetista ?? ''
         };
     },
 
@@ -231,7 +234,8 @@ export const authService = {
                 expiresAt: data.expires_at ?? undefined,
                 isTemp: data.is_temp ?? false,
                 canManageTags: data.can_manage_tags ?? false,
-                isProjetista: data.is_projetista ?? false
+                isProjetista: data.is_projetista ?? false,
+                projetista: data.projetista ?? ''
             },
             passwordRaw: tempPassword
         };
@@ -319,11 +323,12 @@ export const authService = {
             expiresAt: row.expires_at ?? undefined,
             isTemp: row.is_temp ?? false,
             canManageTags: row.can_manage_tags ?? false,
-            isProjetista: row.is_projetista ?? false
+            isProjetista: row.is_projetista ?? false,
+            projetista: row.projetista ?? ''
         }));
     },
 
-    updateUser: async (userId: string, updates: Partial<{ name: string; email: string; isAdmin: boolean; isVisitor: boolean; isActive: boolean; canManageTags: boolean; isProjetista: boolean; password?: string }>): Promise<void> => {
+    updateUser: async (userId: string, updates: Partial<{ name: string; email: string; isAdmin: boolean; isVisitor: boolean; isActive: boolean; canManageTags: boolean; isProjetista: boolean; projetista: string; password?: string }>): Promise<void> => {
         const updateData: TablesUpdate<'users'> = {};
         if (updates.name !== undefined) updateData.name = updates.name;
         if (updates.email !== undefined) updateData.email = updates.email;
@@ -332,6 +337,7 @@ export const authService = {
         if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
         if (updates.canManageTags !== undefined) updateData.can_manage_tags = updates.canManageTags;
         if (updates.isProjetista !== undefined) updateData.is_projetista = updates.isProjetista;
+        if (updates.projetista !== undefined) updateData.projetista = updates.projetista;
 
         // Atualizar a senha/email no Auth. O SDK cliente só permite atualizar o PRÓPRIO usuário logado.
         const { data: { session } } = await supabase.auth.getSession();
@@ -561,7 +567,8 @@ export const authService = {
             expiresAt: profile.expires_at ?? undefined,
             isTemp: profile.is_temp ?? false,
             canManageTags: profile.can_manage_tags ?? false,
-            isProjetista: profile.is_projetista ?? false
+            isProjetista: profile.is_projetista ?? false,
+            projetista: profile.projetista ?? ''
         };
     }
 };
