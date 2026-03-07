@@ -113,6 +113,16 @@ export const SCRIPT_OPTIONS = [
         label: 'Programação Visual',
         description: 'Insere renders do projeto neste slot e em outros slots vazios de tamanho similar na mesma página. Ordena pelo nome do arquivo (menor número primeiro).',
     },
+    {
+        name: 'pv_texto',
+        label: 'P.V. Texto',
+        description: 'Extrai do memorial a seção "Impressão Digital" (itens abaixo do título até o próximo) e renderiza em texto compacto. Fonte auto-ajustável para caber no slot.',
+    },
+    {
+        name: 'eletrica',
+        label: 'Elétrica Texto',
+        description: 'Extrai do memorial a seção "Elétrica" e renderiza em texto compacto com título em negrito. Fonte auto-ajustável para caber no slot.',
+    },
 ];
 
 // ── Componente ─────────────────────────────────────────────────────────────────
@@ -268,7 +278,7 @@ export default function ConfiguracaoPage() {
                                     // Painel completo só para modo texto/campo
                                     const showStyle = mode !== 'script';
                                     // Scripts que aceitam estilo tipográfico (não são imagem)
-                                    const TEXT_SCRIPTS = new Set(['hoje', 'cliente_evento', 'mes_ano', '01', 'altura_estande', 'projetista']);
+                                    const TEXT_SCRIPTS = new Set(['hoje', 'cliente_evento', 'mes_ano', '01', 'altura_estande', 'projetista', 'pv_texto', 'eletrica']);
                                     const showScriptStyle = mode === 'script' && TEXT_SCRIPTS.has(def.scriptName ?? '');
 
                                     return (

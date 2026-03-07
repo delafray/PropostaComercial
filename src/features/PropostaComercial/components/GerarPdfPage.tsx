@@ -94,6 +94,20 @@ function hexToRgb(hex: string): [number, number, number] {
     return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0];
 }
 
+/** Extrai do memorial a seção pelo título (case-insensitive).
+ *  Retorna só as linhas de itens (com TAB), sem o título e sem o próximo título. */
+function extrairSecaoMemorial(memorial: string, titulo: string): string {
+    const lines = memorial.split('\n').map(l => l.trim()).filter(Boolean);
+    const idx = lines.findIndex(l => !l.includes('\t') && l.toLowerCase().includes(titulo.toLowerCase()));
+    if (idx === -1) return '';
+    const items: string[] = [];
+    for (let i = idx + 1; i < lines.length; i++) {
+        if (!lines[i].includes('\t')) break;
+        items.push(lines[i]);
+    }
+    return items.join('\n');
+}
+
 // ── Helpers: Script Planta ────────────────────────────────────────────────────
 
 /** Retorna as dimensões naturais (pixels) de um File de imagem (JPG/PNG/SVG). */
@@ -704,6 +718,10 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                             map[slot.nome] = proposta?.dados?.pasta?.tamanhoEstande ?? '';
                         } else if (slotDef?.scriptName === 'projetista') {
                             map[slot.nome] = nomeProjetista;
+                        } else if (slotDef?.scriptName === 'pv_texto') {
+                            map[slot.nome] = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'impressão digital');
+                        } else if (slotDef?.scriptName === 'eletrica') {
+                            map[slot.nome] = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'elétrica');
                         }
                         // script 'projeto' é tratado no loop de páginas (imagem), não aqui
                         continue;
@@ -862,6 +880,121 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 return [];
             }
 
+            // ── Função genérica para scripts de seção do memorial ─────────────
+
+            // numCols = quantas colunas "curtas" antes da descrição
+            // pv_texto: 3 (ID, qty, unit) | eletrica: 2 (qty, unit)
+            async function renderSecaoTexto(doc: jsPDF, text: string, slot: SlotElemento, titulo: string, numCols: number = 2): Promise<void> {
+                if (!text) return;
+                const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                const partLines = rawLines.map(l => l.split('\t').map(p => p.trim()).filter(Boolean));
+                const formattedLines = partLines.map(parts => parts.join('  ')); // para auto-shrink
+
+                const configColor = slotDefaults[slot.id]?.color;
+                const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
+                const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
+                const lineSpacing = 0.1;
+                const itemGap = 0.7;
+                const startSize: number = slotDefaults[slot.id]?.fontSize ?? 8;
+                const minSize = 5;
+                const gap3pt = 3 * (25.4 / 72); // 3pt em mm
+
+                const fontVetor = await carregarFonteVetor(configFontFamily, 'normal');
+
+                // Auto-shrink conservador usando linha unida
+                let finalSize = minSize;
+                for (let sz = startSize; sz >= minSize; sz -= 0.5) {
+                    const lineH = sz * 0.35;
+                    const sizeMm = sz * (25.4 / 72);
+                    let totalLines = 1; // título
+                    for (const line of formattedLines) {
+                        totalLines += fontVetor
+                            ? wrapTextoMm(fontVetor, line, slot.w_mm - 2, sizeMm).length
+                            : 1;
+                    }
+                    const totalHeight = totalLines * (lineH + lineSpacing)
+                        + itemGap
+                        + (partLines.length - 1) * itemGap;
+                    finalSize = sz;
+                    if (totalHeight <= slot.h_mm) break;
+                }
+
+                const lineH = finalSize * 0.35;
+                const sizeMm = finalSize * (25.4 / 72);
+
+                // Calcula posição X de cada coluna curta com base na largura máxima real dos dados
+                // colX[0..numCols-1] = colunas curtas; colX[numCols] = coluna de descrição
+                const colX: number[] = [slot.x_mm];
+                if (fontVetor) {
+                    for (let c = 0; c < numCols; c++) {
+                        const maxW = Math.max(0, ...partLines.map(p =>
+                            p[c] ? fontVetor.getAdvanceWidth(p[c], sizeMm) : 0
+                        ));
+                        colX.push(colX[c] + maxW + gap3pt);
+                    }
+                } else {
+                    const colW = (slot.w_mm * 0.5) / numCols;
+                    for (let c = 0; c < numCols; c++) colX.push(colX[c] + colW);
+                }
+
+                let y = slot.y_mm;
+
+                // Título em negrito
+                const titleY = y + lineH;
+                if (titleY <= slot.y_mm + slot.h_mm) {
+                    const okT = await renderTextoVetor(doc, titulo, slot.x_mm, titleY, configFontFamily, 'bold', finalSize, [r, g, b]);
+                    if (!okT) {
+                        doc.setFontSize(finalSize); doc.setFont(configFontFamily, 'bold');
+                        doc.setTextColor(r, g, b); doc.text(titulo, slot.x_mm, titleY);
+                    }
+                    y += lineH + lineSpacing + itemGap;
+                }
+
+                // Helper de render
+                async function renderCampo(txt: string, x: number, yLine: number) {
+                    const ok = await renderTextoVetor(doc, txt, x, yLine, configFontFamily, 'normal', finalSize, [r, g, b]);
+                    if (!ok) {
+                        doc.setFontSize(finalSize); doc.setFont(configFontFamily, 'normal');
+                        doc.setTextColor(r, g, b); doc.text(txt, x, yLine);
+                    }
+                }
+
+                const spaceW = fontVetor ? fontVetor.getAdvanceWidth('  ', sizeMm) : finalSize * 0.3;
+
+                for (let i = 0; i < partLines.length; i++) {
+                    const parts = partLines[i];
+                    const lineY = y + lineH;
+                    if (lineY > slot.y_mm + slot.h_mm) return;
+
+                    // Colunas curtas (ID, qty, unit) — cada uma como path separado na posição calculada
+                    for (let c = 0; c < numCols && c < parts.length; c++) {
+                        if (parts[c]) await renderCampo(parts[c], colX[c], lineY);
+                    }
+
+                    // Descrição + observações — cada parte também como path separado
+                    const descParts = parts.slice(numCols).filter(Boolean);
+                    const descX = colX[numCols] ?? slot.x_mm;
+                    let dx = descX;
+                    for (const dp of descParts) {
+                        await renderCampo(dp, dx, lineY);
+                        dx += fontVetor
+                            ? fontVetor.getAdvanceWidth(dp, sizeMm) + spaceW
+                            : dp.length * finalSize * 0.5 + spaceW;
+                    }
+
+                    y += lineH + lineSpacing;
+                    if (i < partLines.length - 1) y += itemGap;
+                }
+            }
+
+            async function renderPvTexto(doc: jsPDF, text: string, slot: SlotElemento): Promise<void> {
+                await renderSecaoTexto(doc, text, slot, 'Programação Visual', 3);
+            }
+
+            async function renderEletrica(doc: jsPDF, text: string, slot: SlotElemento): Promise<void> {
+                await renderSecaoTexto(doc, text, slot, 'Elétrica', 2);
+            }
+
             // ── Renderizar textos ─────────────────────────────────────────────
 
             async function renderizarTextos(
@@ -883,6 +1016,16 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     if (slotDef?.scriptName === '01') {
                         const linesToRender = linesOverride ?? text.split('\n').map(l => l.trim()).filter(Boolean);
                         leftOvers = await renderDescritivo01(doc, linesToRender, slot, fontSizeMap);
+                        continue;
+                    }
+
+                    if (slotDef?.scriptName === 'pv_texto') {
+                        await renderPvTexto(doc, text, slot);
+                        continue;
+                    }
+
+                    if (slotDef?.scriptName === 'eletrica') {
+                        await renderEletrica(doc, text, slot);
                         continue;
                     }
 
