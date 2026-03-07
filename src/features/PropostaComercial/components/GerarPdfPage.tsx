@@ -9,6 +9,7 @@ import PdfActionModal from './PdfActionModal';
 import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 import { prefService } from '../services/prefService';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
+import { registrarFontes, normalizarFamilia } from '../utils/fontLoader';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,33 @@ async function fetchBase64(url: string): Promise<{ data: string; format: 'PNG' |
     });
 }
 
+/**
+ * Converte SVG para JPEG via canvas.
+ * Elimina fontes externas embutidas pelo svg2pdf, tornando o PDF limpo para CorelDraw.
+ */
+async function rasterizarSvg(svgText: string, wMm: number, hMm: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const DPI = 200;
+        const MM_TO_PX = DPI / 25.4;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(wMm * MM_TO_PX);
+        canvas.height = Math.round(hMm * MM_TO_PX);
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const img = new Image();
+        const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao rasterizar SVG do backdrop')); };
+        img.src = url;
+    });
+}
+
 async function adicionarFundo(
     doc: jsPDF,
     backdrop: TemplateBackdrop,
@@ -36,9 +64,16 @@ async function adicionarFundo(
     if (backdrop.tipo_arquivo === 'SVG') {
         const res = await fetch(backdrop.url_imagem);
         const svgText = await res.text();
-        const parser = new DOMParser();
-        const svgEl = parser.parseFromString(svgText, 'image/svg+xml').documentElement;
-        await svg2pdf(svgEl, doc, { x: 0, y: 0, width: W, height: H });
+        try {
+            // Rasteriza para JPEG — elimina fontes do SVG do PDF (melhora compatibilidade CorelDraw)
+            const jpegB64 = await rasterizarSvg(svgText, W, H);
+            doc.addImage(jpegB64, 'JPEG', 0, 0, W, H);
+        } catch {
+            // Fallback: svg2pdf mantém vetores mas pode embutir fontes externas
+            const parser = new DOMParser();
+            const svgEl = parser.parseFromString(svgText, 'image/svg+xml').documentElement;
+            await svg2pdf(svgEl, doc, { x: 0, y: 0, width: W, height: H });
+        }
     } else {
         const { data, format } = await fetchBase64(backdrop.url_imagem);
         doc.addImage(data, format, 0, 0, W, H);
@@ -413,6 +448,9 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             const W = 297, H = 210;
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
+            setProgress('Carregando fontes...');
+            await registrarFontes(doc);
+
             // Ordena as páginas da máscara
             const paginasConfig = [...(mascara.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
 
@@ -589,8 +627,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 doc.setTextColor(r, g, b);
 
                 const defaultSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
-                let configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
-                if (configFontFamily === 'century-gothic') configFontFamily = 'helvetica';
+                const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
 
                 let currentY = slot.y_mm;
                 const lineHeight = defaultSize * 0.35; // mm per line approx (tighter)
@@ -713,15 +750,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     doc.setFontSize(finalSize);
 
                     // Fonte e estilo: config default > slot definition
-                    let configFontFamily = slotDefaults[slot.id]?.fontFamily ?? 'helvetica';
+                    const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
                     const configFontStyle = slotDefaults[slot.id]?.fontStyle ?? slot.font_style ?? 'normal';
-
-                    // Fallback para fontes não-padrão no jsPDF (Century Gothic exigiria .ttf registrado)
-                    if (configFontFamily === 'century-gothic') {
-                        // Por enquanto fallback para helvetica para evitar erros no jsPDF
-                        // mas mantém o valor no estado para futura integração de .ttf
-                        configFontFamily = 'helvetica';
-                    }
 
                     doc.setFont(
                         configFontFamily,
@@ -782,10 +812,10 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 // Todos os outros slots (exceto projeto e planta)
                 const otherSlots = (cfgPagina.slots ?? []).filter(s => s !== projetoSlot && s !== plantaSlot);
 
-                // Repete 1× por render (projeto), 2× (planta: original + anotada), ou 1× normal
+                // Repete 1× por render (projeto), 2× (planta: original + anotada se há refs OCV), ou 1× normal
                 const timesToRepeat = projetoSlot
                     ? Math.max(renderUrls.length, 1)
-                    : plantaSlot ? 2 : 1;
+                    : plantaSlot ? (referenciasOCV.length > 0 ? 2 : 1) : 1;
 
                 let remainingLines: string[] | undefined = undefined;
 
