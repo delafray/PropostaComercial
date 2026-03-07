@@ -9,7 +9,7 @@ import PdfActionModal from './PdfActionModal';
 import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 import { prefService } from '../services/prefService';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
-import { registrarFontes, normalizarFamilia } from '../utils/fontLoader';
+import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg } from '../utils/fontLoader';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,14 +65,22 @@ async function adicionarFundo(
         const res = await fetch(backdrop.url_imagem);
         const svgText = await res.text();
         try {
-            // Rasteriza para JPEG — elimina fontes do SVG do PDF (melhora compatibilidade CorelDraw)
-            const jpegB64 = await rasterizarSvg(svgText, W, H);
-            doc.addImage(jpegB64, 'JPEG', 0, 0, W, H);
-        } catch {
-            // Fallback: svg2pdf mantém vetores mas pode embutir fontes externas
+            // Preprocessa o SVG (remove @font-face e font-family) → svg2pdf vetorial puro, sem fontes externas
+            const svgLimpo = preprocessarSvg(svgText);
             const parser = new DOMParser();
-            const svgEl = parser.parseFromString(svgText, 'image/svg+xml').documentElement;
+            const svgEl = parser.parseFromString(svgLimpo, 'image/svg+xml').documentElement;
             await svg2pdf(svgEl, doc, { x: 0, y: 0, width: W, height: H });
+        } catch {
+            // Fallback: rasteriza para JPEG se o svg2pdf falhar
+            try {
+                const jpegB64 = await rasterizarSvg(svgText, W, H);
+                doc.addImage(jpegB64, 'JPEG', 0, 0, W, H);
+            } catch {
+                // Último recurso: svg2pdf sem preprocessing
+                const parser = new DOMParser();
+                const svgEl = parser.parseFromString(svgText, 'image/svg+xml').documentElement;
+                await svg2pdf(svgEl, doc, { x: 0, y: 0, width: W, height: H });
+            }
         }
     } else {
         const { data, format } = await fetchBase64(backdrop.url_imagem);
@@ -280,7 +288,7 @@ function overlapsAny(box: PlacedBox, placed: PlacedBox[]): boolean {
     return false;
 }
 
-function drawPlantaAnnotations(
+async function drawPlantaAnnotations(
     doc: jsPDF,
     drawRegion: { x: number; y: number; w: number; h: number }, // área real da planta no PDF
     matches: Array<{ match: OcvMatch; ref: TemplateReferencia; imgB64: string; imgFormat: 'PNG' | 'JPEG' }>
@@ -289,36 +297,34 @@ function drawPlantaAnnotations(
     const ANGLES = [-Math.PI / 2, -Math.PI / 4, 0, Math.PI / 4, Math.PI / 2, Math.PI * 3 / 4, Math.PI, -Math.PI * 3 / 4];
 
     for (const { match, ref, imgB64, imgFormat } of matches) {
-        // Mapeia coordenadas do match para a região real da planta (não o slot inteiro)
         const cx = drawRegion.x + match.cx_ratio * drawRegion.w;
         const cy = drawRegion.y + match.cy_ratio * drawRegion.h;
         const mw = Math.max(3, match.w_ratio * drawRegion.w);
         const mh = Math.max(3, match.h_ratio * drawRegion.h);
 
-        // Overlay da isca (colorida) — aspect ratio preservado (contain dentro do match box)
+        // Overlay da isca (colorida)
         const asp = match.img_aspect;
         let dispW = mw, dispH = mh;
         if (mw / Math.max(mh, 0.001) > asp) {
-            dispW = mh * asp; // limitado pela altura
+            dispW = mh * asp;
         } else {
-            dispH = mw / Math.max(asp, 0.001); // limitado pela largura
+            dispH = mw / Math.max(asp, 0.001);
         }
         doc.addImage(imgB64, imgFormat, cx - dispW / 2, cy - dispH / 2, dispW, dispH, undefined, 'FAST');
 
-        // Borda colorida ao redor do overlay (mesmas dimensões do dispW/dispH)
         const [br, bg, bb] = hexToRgb(ref.cor_holograma ?? '#d22323');
         doc.setDrawColor(br, bg, bb);
         doc.setLineWidth(0.4);
         doc.rect(cx - dispW / 2, cy - dispH / 2, dispW, dispH, 'S');
 
-        // Tamanho do label baseado no texto
+        // Calcula largura do label usando métricas do jsPDF (apenas para posicionamento)
         doc.setFontSize(6);
         doc.setFont('helvetica', 'bold');
         const LABEL_W = Math.min(doc.getTextWidth(ref.nome_item.toUpperCase()) + 3, 40);
         const LABEL_H = 4.5;
         const DIST = Math.max(dispW, dispH) / 2 + 4;
 
-        // Testa 8 ângulos para posição do label — escolhe o primeiro sem sobreposição
+        // Posição do label: testa 8 ângulos
         let lx = cx - LABEL_W / 2;
         let ly = cy - DIST - LABEL_H;
         for (let ai = 0; ai < ANGLES.length; ai++) {
@@ -334,22 +340,24 @@ function drawPlantaAnnotations(
             }
         }
 
-        // Seta: linha do centro do label ao centro do match
+        // Seta e caixa do label
         doc.setDrawColor(br, bg, bb);
         doc.setLineWidth(0.35);
         doc.line(lx + LABEL_W / 2, ly + LABEL_H / 2, cx, cy);
-
-        // Caixa do label (fundo branco + borda colorida)
         doc.setFillColor(255, 255, 255);
         doc.setDrawColor(br, bg, bb);
         doc.setLineWidth(0.25);
         doc.rect(lx, ly, LABEL_W, LABEL_H, 'FD');
 
-        // Texto do label
-        doc.setFontSize(6);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(br, bg, bb);
-        doc.text(ref.nome_item.toUpperCase(), lx + 1.5, ly + LABEL_H - 1.3);
+        // Texto do label como vetor
+        const labelY = ly + LABEL_H - 1.3;
+        const ok = await renderTextoVetor(doc, ref.nome_item.toUpperCase(), lx + 1.5, labelY, 'helvetica', 'bold', 6, [br, bg, bb]);
+        if (!ok) {
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(br, bg, bb);
+            doc.text(ref.nome_item.toUpperCase(), lx + 1.5, labelY);
+        }
     }
 }
 
@@ -621,125 +629,113 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
             // ── Função auxiliar Script 01 (Descritivo Tabulado) ───────────────
 
-            function renderDescritivo01(doc: jsPDF, lines: string[], slot: SlotElemento, fontSizeMap: Record<string, number> = {}): string[] {
+            async function renderDescritivo01(doc: jsPDF, lines: string[], slot: SlotElemento, fontSizeMap: Record<string, number> = {}): Promise<string[]> {
                 const configColor = slotDefaults[slot.id]?.color;
                 const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
-                doc.setTextColor(r, g, b);
 
                 const defaultSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
                 const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
 
                 let currentY = slot.y_mm;
-                const lineHeight = defaultSize * 0.35; // mm per line approx (tighter)
-                const lineSpacing = 0.5; // Espaçamento menor entre linhas
+                const lineHeight = defaultSize * 0.35;
+                const lineSpacing = 0.5;
                 const maxY = slot.y_mm + slot.h_mm;
 
-                // Definir larguras/posições das colunas (relativas ao X inicial)
                 const X_START = slot.x_mm;
                 const COL_QTD = X_START + 12;
                 const COL_UNID = X_START + 25;
                 const COL_DESC = X_START + 40;
 
+                // Carrega fonte para word-wrap da coluna de descrição
+                const fontVetor = await carregarFonteVetor(configFontFamily, 'normal');
+                const sizeMmNormal = (defaultSize - 1) * (25.4 / 72);
+                const maxDescW = slot.w_mm - (COL_DESC - X_START) - 2;
+
+                async function drawCol(text: string, x: number, y: number, style: 'normal' | 'bold', size: number) {
+                    const ok = await renderTextoVetor(doc, text, x, y, configFontFamily, style, size, [r, g, b]);
+                    if (!ok) {
+                        doc.setFontSize(size);
+                        doc.setFont(configFontFamily, style);
+                        doc.setTextColor(r, g, b);
+                        doc.text(text, x, y);
+                    }
+                }
+
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
                     if (currentY > maxY - lineHeight) {
-                        return lines.slice(i); // Retorna as linhas excedentes para a próxima página
+                        return lines.slice(i);
                     }
 
-                    // Checa se a linha tem tabs (indicando que é um item da lista)
                     if (line.includes('\t')) {
-                        // Linha Normal: Item técnico -> ID \t Qtd \t Unid \t Desc
-                        doc.setFontSize(defaultSize - 1); // ligeiramente menor que o título
-                        doc.setFont(configFontFamily, 'normal');
-
                         let parts = line.split('\t').map(p => p.trim());
-
-                        // Heurística para linhas sem ID (ex: "100 \t m2 \t Revestimento...")
-                        // Se tem apenas 3 partes, ou se a primeira palavra não tem um ponto separador (ex '1.1') e a segunda parte parece uma unidade de medida..
                         if (parts.length === 3 || (parts.length > 1 && !parts[0].includes('.') && isNaN(Number(parts[0].replace(',', '.'))) === false)) {
-                            // Empurra as colunas pra direita: [vazio, Qtd, Unid, Descrição]
                             parts = ['', parts[0], parts[1], parts.slice(2).join(' ')];
                         }
 
-                        // ID (left)
-                        if (parts[0]) doc.text(parts[0], X_START, currentY + lineHeight);
+                        const lineY = currentY + lineHeight;
+                        if (parts[0]) await drawCol(parts[0], X_START, lineY, 'normal', defaultSize - 1);
+                        if (parts[1]) await drawCol(parts[1], COL_QTD,  lineY, 'normal', defaultSize - 1);
+                        if (parts[2]) await drawCol(parts[2], COL_UNID, lineY, 'normal', defaultSize - 1);
 
-                        // Qtd (left)
-                        if (parts[1]) doc.text(parts[1], COL_QTD, currentY + lineHeight);
-
-                        // Unid (left)
-                        if (parts[2]) doc.text(parts[2], COL_UNID, currentY + lineHeight);
-
-                        // Desc (left) - Corta se for muito longa
                         if (parts[3]) {
-                            const maxW = slot.w_mm - (COL_DESC - X_START); // Espaço restante
-                            let desc = parts[3];
-                            // Tentativa simples de elipse se passar do limite visual
-                            // Idealmente usar doc.splitTextToSize, mas manteremos simple.
-                            doc.text(desc, COL_DESC, currentY + lineHeight, { maxWidth: maxW - 2 });
+                            // Word-wrap com métricas reais da fonte
+                            const descLines = fontVetor
+                                ? wrapTextoMm(fontVetor, parts[3], maxDescW, sizeMmNormal)
+                                : [parts[3]];
+                            for (let dl = 0; dl < descLines.length; dl++) {
+                                const descY = lineY + dl * (lineHeight + lineSpacing);
+                                if (descY > maxY - lineHeight) break;
+                                await drawCol(descLines[dl], COL_DESC, descY, 'normal', defaultSize - 1);
+                            }
+                            // Avança pelo número de linhas da descrição
+                            currentY += (descLines.length - 1) * (lineHeight + lineSpacing);
                         }
 
-                        // Avança linha para itens normais
                         currentY += lineHeight + lineSpacing;
 
                     } else {
-                        // Linha sem tab: É uma Categoria (ex: "Mobiliário")
-                        doc.setFontSize(defaultSize);
-                        doc.setFont(configFontFamily, 'bold');
-
-                        // Espaço extra antes da categoria (apenas se não for a primeira linha)
-                        if (currentY > slot.y_mm) {
-                            currentY += (lineHeight * 0.8);
-                        }
-
+                        // Categoria (bold)
+                        if (currentY > slot.y_mm) currentY += (lineHeight * 0.8);
                         if (currentY > maxY - lineHeight) break;
 
-                        doc.text(line, COL_DESC, currentY + lineHeight); // Alinhado com a descrição
-
-                        // Avança linha com um pouco mais de respiro DEPOIS da categoria
+                        await drawCol(line, COL_DESC, currentY + lineHeight, 'bold', defaultSize);
                         currentY += lineHeight + (lineSpacing * 2);
                     }
                 }
 
-                return []; // Todas as linhas couberam nesta página
+                return [];
             }
 
             // ── Renderizar textos ─────────────────────────────────────────────
 
-            function renderizarTextos(
+            async function renderizarTextos(
                 slots: SlotElemento[],
                 nameToValue: Record<string, string>,
                 isCapa = false,
                 fontSizeMap: Record<string, number> = {},
                 linesOverride?: string[]
-            ): string[] {
+            ): Promise<string[]> {
                 let leftOvers: string[] = [];
 
                 for (const slot of slots) {
                     const text = nameToValue[slot.nome] ?? '';
                     const slotDef = slotDefaults[slot.id];
 
-                    // Se estamos numa página de transbordo (linesOverride existe), ignorar todos os slots NÃO-SCRIPT 01
                     if (linesOverride && slotDef?.scriptName !== '01') continue;
-
-                    // Se não tem texto E também não temos linesOverride, pula
                     if (!text && !linesOverride) continue;
 
                     if (slotDef?.scriptName === '01') {
-                        // Passa as linhas de override se existirem, senão quebra o texto novo
                         const linesToRender = linesOverride ?? text.split('\n').map(l => l.trim()).filter(Boolean);
-                        leftOvers = renderDescritivo01(doc, linesToRender, slot, fontSizeMap);
-                        continue; // Importante: Pula a renderização padrão de texto se for o script 01
+                        leftOvers = await renderDescritivo01(doc, linesToRender, slot, fontSizeMap);
+                        continue;
                     }
 
-                    if (!text) continue; // Slots normais precisam de texto
+                    if (!text) continue;
 
-                    // Cor: config default > slot definition
                     const configColor = slotDefaults[slot.id]?.color;
                     const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
-                    doc.setTextColor(r, g, b);
 
-                    // Tamanho: fontSizeMap (proposta/config) > slot.font_size > 10
                     let finalSize = fontSizeMap[slot.id] ?? slotDefaults[slot.id]?.fontSize ?? slot.font_size ?? 10;
                     if (isCapa && !fontSizeMap[slot.id] && !slotDefaults[slot.id]?.fontSize) {
                         finalSize += 8;
@@ -747,34 +743,30 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                         finalSize = 10;
                     }
 
-                    doc.setFontSize(finalSize);
-
-                    // Fonte e estilo: config default > slot definition
                     const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
                     const configFontStyle = slotDefaults[slot.id]?.fontStyle ?? slot.font_style ?? 'normal';
+                    const jsPdfStyle = configFontStyle === 'bold' ? 'bold' : configFontStyle === 'italic' ? 'italic' : 'normal';
 
-                    doc.setFont(
-                        configFontFamily,
-                        configFontStyle === 'bold' ? 'bold'
-                            : configFontStyle === 'italic' ? 'italic'
-                                : 'normal'
-                    );
-
-                    // Alinhamento: config default > slot definition
                     const align = (slotDefaults[slot.id]?.align ?? slot.align ?? 'left') as 'left' | 'center' | 'right';
                     const x = align === 'center' ? slot.x_mm + slot.w_mm / 2
                         : align === 'right' ? slot.x_mm + slot.w_mm
                             : slot.x_mm;
                     const y = slot.y_mm + slot.h_mm * 0.75;
 
-                    doc.text(text, x, y, { align });
+                    // Renderiza como vetor; fallback para doc.text se necessário
+                    const ok = await renderTextoVetor(doc, text, x, y, configFontFamily, configFontStyle, finalSize, [r, g, b], align);
+                    if (!ok) {
+                        doc.setTextColor(r, g, b);
+                        doc.setFontSize(finalSize);
+                        doc.setFont(configFontFamily, jsPdfStyle);
+                        doc.text(text, x, y, { align });
+                    }
 
-                    // -- MODO DEBUG: Retângulo e Nome do Slot --
+                    // Modo debug
                     if (debugMode) {
-                        doc.setDrawColor(255, 0, 255); // Magenta
+                        doc.setDrawColor(255, 0, 255);
                         doc.setLineWidth(0.1);
                         doc.rect(slot.x_mm, slot.y_mm, slot.w_mm, slot.h_mm, 'S');
-
                         doc.setFontSize(6);
                         doc.setTextColor(255, 0, 255);
                         doc.text(`[${slot.nome}]`, slot.x_mm, slot.y_mm - 1);
@@ -901,14 +893,14 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                                     }
                                     if (plantaMatches.length > 0) {
                                         // Passa region (área real desenhada) para mapear coordenadas corretamente
-                                        drawPlantaAnnotations(doc, region, plantaMatches);
+                                        await drawPlantaAnnotations(doc, region, plantaMatches);
                                     }
                                 }
                             }
                         }
 
                         // Renderiza os outros slots normalmente
-                        remainingLines = renderizarTextos(otherSlots, textMap, isCapa, fsMap, remainingLines);
+                        remainingLines = await renderizarTextos(otherSlots, textMap, isCapa, fsMap, remainingLines);
                         pageIndex++;
                     } while (remainingLines && remainingLines.length > 0);
                 }

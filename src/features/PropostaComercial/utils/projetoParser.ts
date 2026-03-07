@@ -7,7 +7,7 @@ import { ProjetoInput } from '../types';
  * Estrutura esperada da pasta:
  *   10.jpg, 11.jpg ...  → renders (ordenados numericamente, menor = capa)
  *   9182.pdf            → briefing do projeto (4-5 dígitos)
- *   Planta.png          → planta baixa
+ *   Planta.png/.svg     → planta baixa
  *   altura_3,50m.png    → tamanho do estande (número extraído do nome)
  *   logo.png            → logo do cliente
  *   *.txt               → memorial descritivo / diagramação
@@ -15,7 +15,7 @@ import { ProjetoInput } from '../types';
 
 const RE_RENDER    = /^\d+\.(jpg|jpeg|png)$/i;
 const RE_BRIEFING  = /^\d{4,5}\.pdf$/i;
-const RE_PLANTA    = /^planta\.(png|jpg|jpeg)$/i;
+const RE_PLANTA    = /^planta\.(png|jpg|jpeg|svg)$/i;
 const RE_LOGO      = /^logo\.(png|jpg|jpeg)$/i;
 const RE_TAMANHO   = /(\d+)[,.](\d+)\s*m/i;  // ex: "3,50m" ou "3.50m"
 
