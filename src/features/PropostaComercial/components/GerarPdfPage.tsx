@@ -810,15 +810,31 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 const lineSpacing = 0.1;
                 const maxY = slot.y_mm + slot.h_mm;
 
-                const X_START = slot.x_mm;
-                const COL_QTD = X_START + 12;
-                const COL_UNID = X_START + 25;
-                const COL_DESC = X_START + 40;
-
                 // Carrega fonte para word-wrap da coluna de descrição
                 const fontVetor = await carregarFonteVetor(configFontFamily, 'normal');
                 const sizeMmNormal = (defaultSize - 1) * (25.4 / 72);
-                const maxDescW = slot.w_mm - (COL_DESC - X_START) - 2;
+                const gap6pt = 6 * (25.4 / 72);
+                const X_START = slot.x_mm;
+
+                // Pré-passo: mede largura máxima de cada coluna curta nos dados reais
+                let maxW0 = 0, maxW1 = 0, maxW2 = 0;
+                if (fontVetor) {
+                    for (const line of lines) {
+                        if (!line.includes('\t')) continue;
+                        let ps = line.split('\t').map(p => p.trim());
+                        if (ps.length === 3 || (ps.length > 1 && !ps[0].includes('.') && !isNaN(Number(ps[0].replace(',', '.'))))) {
+                            ps = ['', ps[0], ps[1], ps.slice(2).join(' ')];
+                        }
+                        if (ps[0]) maxW0 = Math.max(maxW0, fontVetor.getAdvanceWidth(ps[0], sizeMmNormal));
+                        if (ps[1]) maxW1 = Math.max(maxW1, fontVetor.getAdvanceWidth(ps[1], sizeMmNormal));
+                        if (ps[2]) maxW2 = Math.max(maxW2, fontVetor.getAdvanceWidth(ps[2], sizeMmNormal));
+                    }
+                }
+
+                const COL_QTD  = X_START + (maxW0 > 0 ? maxW0 + gap6pt : 0);
+                const COL_UNID = COL_QTD  + (maxW1 > 0 ? maxW1 + gap6pt : 0);
+                const COL_DESC = COL_UNID + (maxW2 > 0 ? maxW2 + gap6pt : 0);
+                const maxDescW = slot.x_mm + slot.w_mm - COL_DESC - 1;
 
                 async function drawCol(text: string, x: number, y: number, style: 'normal' | 'bold', size: number, color: [number, number, number] = [r, g, b]) {
                     const ok = await renderTextoVetor(doc, text, x, y, configFontFamily, style, size, color);
@@ -888,28 +904,48 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 if (!text) return;
                 const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
                 const partLines = rawLines.map(l => l.split('\t').map(p => p.trim()).filter(Boolean));
-                const formattedLines = partLines.map(parts => parts.join('  ')); // para auto-shrink
 
                 const configColor = slotDefaults[slot.id]?.color;
                 const [r, g, b] = hexToRgb(configColor ?? slot.color ?? '#000000');
                 const configFontFamily = normalizarFamilia(slotDefaults[slot.id]?.fontFamily);
                 const lineSpacing = 0.1;
                 const itemGap = 0.7;
-                const startSize: number = slotDefaults[slot.id]?.fontSize ?? 8;
+                const startSize: number = slotDefaults[slot.id]?.fontSize ?? 7;
                 const minSize = 5;
-                const gap3pt = 3 * (25.4 / 72); // 3pt em mm
+                const gap3pt = 3 * (25.4 / 72);
 
                 const fontVetor = await carregarFonteVetor(configFontFamily, 'normal');
 
-                // Auto-shrink conservador usando linha unida
+                // Calcula posições X das colunas curtas para um dado sizeMm
+                function computeColX(sizeMm: number): number[] {
+                    const cx: number[] = [slot.x_mm];
+                    if (fontVetor) {
+                        for (let c = 0; c < numCols; c++) {
+                            const maxW = Math.max(0, ...partLines.map(p =>
+                                p[c] ? fontVetor!.getAdvanceWidth(p[c], sizeMm) : 0
+                            ));
+                            cx.push(cx[c] + maxW + gap3pt);
+                        }
+                    } else {
+                        const colW = (slot.w_mm * 0.5) / numCols;
+                        for (let c = 0; c < numCols; c++) cx.push(cx[c] + colW);
+                    }
+                    return cx;
+                }
+
+                // Auto-shrink: usa largura real da coluna de descrição para wrap preciso
                 let finalSize = minSize;
                 for (let sz = startSize; sz >= minSize; sz -= 0.5) {
                     const lineH = sz * 0.35;
                     const sizeMm = sz * (25.4 / 72);
+                    const cx = computeColX(sizeMm);
+                    const descX = cx[numCols] ?? slot.x_mm;
+                    const descMaxW = slot.x_mm + slot.w_mm - descX - 1;
                     let totalLines = 1; // título
-                    for (const line of formattedLines) {
-                        totalLines += fontVetor
-                            ? wrapTextoMm(fontVetor, line, slot.w_mm - 2, sizeMm).length
+                    for (const parts of partLines) {
+                        const descText = parts.slice(numCols).filter(Boolean).join('  ');
+                        totalLines += (descText && fontVetor && descMaxW > 0)
+                            ? wrapTextoMm(fontVetor, descText, descMaxW, sizeMm).length
                             : 1;
                     }
                     const totalHeight = totalLines * (lineH + lineSpacing)
@@ -921,21 +957,9 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
 
                 const lineH = finalSize * 0.35;
                 const sizeMm = finalSize * (25.4 / 72);
-
-                // Calcula posição X de cada coluna curta com base na largura máxima real dos dados
-                // colX[0..numCols-1] = colunas curtas; colX[numCols] = coluna de descrição
-                const colX: number[] = [slot.x_mm];
-                if (fontVetor) {
-                    for (let c = 0; c < numCols; c++) {
-                        const maxW = Math.max(0, ...partLines.map(p =>
-                            p[c] ? fontVetor.getAdvanceWidth(p[c], sizeMm) : 0
-                        ));
-                        colX.push(colX[c] + maxW + gap3pt);
-                    }
-                } else {
-                    const colW = (slot.w_mm * 0.5) / numCols;
-                    for (let c = 0; c < numCols; c++) colX.push(colX[c] + colW);
-                }
+                const colX = computeColX(sizeMm);
+                const descX = colX[numCols] ?? slot.x_mm;
+                const descMaxW = slot.x_mm + slot.w_mm - descX - 1;
 
                 let y = slot.y_mm;
 
@@ -950,7 +974,6 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     y += lineH + lineSpacing + itemGap;
                 }
 
-                // Helper de render
                 async function renderCampo(txt: string, x: number, yLine: number) {
                     const ok = await renderTextoVetor(doc, txt, x, yLine, configFontFamily, 'normal', finalSize, [r, g, b]);
                     if (!ok) {
@@ -959,30 +982,34 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     }
                 }
 
-                const spaceW = fontVetor ? fontVetor.getAdvanceWidth('  ', sizeMm) : finalSize * 0.3;
-
                 for (let i = 0; i < partLines.length; i++) {
                     const parts = partLines[i];
                     const lineY = y + lineH;
                     if (lineY > slot.y_mm + slot.h_mm) return;
 
-                    // Colunas curtas (ID, qty, unit) — cada uma como path separado na posição calculada
+                    // Colunas curtas — cada campo como path separado na posição calculada
                     for (let c = 0; c < numCols && c < parts.length; c++) {
                         if (parts[c]) await renderCampo(parts[c], colX[c], lineY);
                     }
 
-                    // Descrição + observações — cada parte também como path separado
-                    const descParts = parts.slice(numCols).filter(Boolean);
-                    const descX = colX[numCols] ?? slot.x_mm;
-                    let dx = descX;
-                    for (const dp of descParts) {
-                        await renderCampo(dp, dx, lineY);
-                        dx += fontVetor
-                            ? fontVetor.getAdvanceWidth(dp, sizeMm) + spaceW
-                            : dp.length * finalSize * 0.5 + spaceW;
+                    // Descrição: une os campos restantes, quebra na largura disponível,
+                    // cada linha de quebra fica alinhada em descX
+                    const descText = parts.slice(numCols).filter(Boolean).join('  ');
+                    if (descText) {
+                        const descWrapped = (fontVetor && descMaxW > 0)
+                            ? wrapTextoMm(fontVetor, descText, descMaxW, sizeMm)
+                            : [descText];
+                        for (let dl = 0; dl < descWrapped.length; dl++) {
+                            const wlineY = lineY + dl * (lineH + lineSpacing);
+                            if (wlineY > slot.y_mm + slot.h_mm) break;
+                            await renderCampo(descWrapped[dl], descX, wlineY);
+                        }
+                        // Avança Y pelo número real de linhas da descrição
+                        y += Math.max(1, descWrapped.length) * (lineH + lineSpacing);
+                    } else {
+                        y += lineH + lineSpacing;
                     }
 
-                    y += lineH + lineSpacing;
                     if (i < partLines.length - 1) y += itemGap;
                 }
             }
