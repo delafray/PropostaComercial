@@ -1,6 +1,7 @@
 // !! REGRA N1: JAMAIS apague/mova arquivos fora de C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\ — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
+import JSZip from 'jszip';
 import { templateService } from '../services/templateService';
 import { prefService } from '../services/prefService';
 import { propostaService } from '../services/propostaService';
@@ -29,6 +30,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     const [ultimaPasta, setUltimaPasta] = useState<{ nome: string; arquivos: string[]; savedAt: string } | null>(null);
     const [handleSalvo, setHandleSalvo] = useState(false);
     const [error, setError] = useState('');
+    const [zippingPasta, setZippingPasta] = useState(false);
 
     useEffect(() => { loadData(); }, []);
 
@@ -165,6 +167,44 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         }
     }
 
+    async function handleBaixarZip() {
+        if (!projeto) return;
+        setZippingPasta(true);
+        try {
+            const zip = new JSZip();
+            const arquivos: File[] = [
+                ...projeto.renders,
+                ...(projeto.briefingPdf ? [projeto.briefingPdf] : []),
+                ...(projeto.planta ? [projeto.planta] : []),
+                ...(projeto.memorial ? [projeto.memorial] : []),
+                ...(projeto.logo ? [projeto.logo] : []),
+                ...(projeto.arquivoTamanho ? [projeto.arquivoTamanho] : []),
+            ];
+            await Promise.all(arquivos.map(async (f) => {
+                const buf = await f.arrayBuffer();
+                zip.file(f.name, buf);
+            }));
+            const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+            const b = proposta?.dados?.briefing;
+            const partes = [(b?.cliente ?? '').trim(), (b?.evento ?? '').trim(), (b?.numero ?? '').trim()].filter(Boolean);
+            const zipName = partes.length > 0
+                ? `${partes.join(' - ')}.zip`
+                : proposta
+                    ? `${proposta.nome.replace(/\s+/g, '_')}.zip`
+                    : `${pastaName || 'projeto'}.zip`;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = zipName;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (e: any) {
+            setError(`Erro ao gerar ZIP: ${e.message}`);
+        } finally {
+            setZippingPasta(false);
+        }
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-20 text-gray-400 text-sm">
@@ -232,6 +272,15 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                                     {mascaraAtiva && totalPages > 0
                                         ? `⬇ Gerar PDF (${totalPages} pág.)`
                                         : '⬇ Gerar PDF'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleBaixarZip}
+                                    disabled={!projeto || zippingPasta || loadingPasta}
+                                    title="Baixar todos os arquivos da pasta como ZIP"
+                                    className="flex items-center gap-2 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    {zippingPasta ? '⌛ Comprimindo...' : '📦 ZIP'}
                                 </button>
                             </>
                         )}

@@ -235,15 +235,6 @@ export default function NovaPropostaPage({ onSaved }: {
 
                 setLoadingProgress(75);
 
-                const tokens = (briefing as any)._tokens ?? [];
-                const diag = (briefing as any)._diag ?? '';
-                setDebugParse(
-                    `Arquivo: ${parsed.briefingPdf.name} (${(parsed.briefingPdf.size / 1024).toFixed(0)} KB)\n` +
-                    `cliente="${briefing.cliente}" evento="${briefing.evento}"\n` +
-                    `\n--- DIAGNÓSTICO ---\n${diag}\n` +
-                    `\n--- TOKENS (${tokens.length}) ---\n` +
-                    tokens.join('\n')
-                );
                 const partes = [briefing.cliente, briefing.evento, briefing.numero].filter(Boolean);
                 if (partes.length > 0) nome = partes.join(' - ');
 
@@ -277,14 +268,8 @@ export default function NovaPropostaPage({ onSaved }: {
                     setAutoFilledIds(filled);
                 }
             } catch (e: any) {
-                setDebugParse(`ERRO ao parsear briefing: ${e?.message ?? e}`);
+                // Briefing parse falhou — continua sem auto-preenchimento
             }
-        } else {
-            const nomes = Array.from(files).map(f => f.name).sort().join('\n');
-            setDebugParse(
-                `Sem arquivo de briefing na pasta (esperado: /^\\d{4,5}\\.pdf$/i)\n\n` +
-                `Arquivos encontrados (${Array.from(files).length}):\n${nomes}`
-            );
         }
 
         setLoadingProgress(90);

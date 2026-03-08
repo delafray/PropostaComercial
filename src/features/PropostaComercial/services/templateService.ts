@@ -118,6 +118,14 @@ export const templateService = {
         return url;
     },
 
+    async updateMascaraNome(id: string, nome: string): Promise<void> {
+        const { error } = await supabase
+            .from('pc_templates_mascara')
+            .update({ nome })
+            .eq('id', id);
+        if (error) throw new Error(error.message);
+    },
+
     async updateMascaraPaginas(id: string, paginas_config: PaginaConfig[]): Promise<void> {
         const { error } = await supabase
             .from('pc_templates_mascara')

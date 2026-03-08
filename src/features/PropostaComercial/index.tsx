@@ -390,7 +390,7 @@ export default function PropostaComercial() {
 
         {view === 'mascara' && <MascarasPage onRenderizarPdf={(fontSize, mascaraId) => { setSessionFontSize(fontSize); setGerarMascaraId(mascaraId); setGerarAutoMode(true); }} />}
         {view === 'nova' && <NovaPropostaPage onSaved={() => setView('gerar')} />}
-        {view === 'gerar' && <GerarPdfPage onGoToNova={() => setView('nova')} />}
+        {view === 'gerar' && <GerarPdfPage onGoToNova={() => setView('nova')} forceMascaraId={mascaraIdParaEditar ?? undefined} />}
         {view === 'templates' && isAdmin && (
           <TemplateManager
             mascaraIdParaEditar={mascaraIdParaEditar}

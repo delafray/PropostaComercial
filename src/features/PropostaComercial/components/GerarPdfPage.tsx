@@ -1478,14 +1478,28 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     </p>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
-                    <button
-                        onClick={loadData}
-                        disabled={loading}
-                        className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded px-3 py-1.5 hover:border-gray-400 hover:text-gray-700 disabled:opacity-40 transition-colors"
-                    >
-                        <span className={loading ? 'animate-spin inline-block' : ''}>⟳</span>
-                        Recarregar
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {!needsPermission && (
+                            <button
+                                onClick={gerarPdf}
+                                disabled={generating}
+                                className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-700 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+                            >
+                                {generating
+                                    ? <><span className="animate-spin inline-block">⟳</span> {progress || 'Gerando...'}</>
+                                    : `⬇ Gerar PDF (${totalPages} pág.)`
+                                }
+                            </button>
+                        )}
+                        <button
+                            onClick={loadData}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded px-3 py-1.5 hover:border-gray-400 hover:text-gray-700 disabled:opacity-40 transition-colors"
+                        >
+                            <span className={loading ? 'animate-spin inline-block' : ''}>⟳</span>
+                            Recarregar
+                        </button>
+                    </div>
                     {proposta?.dados?.briefing && (
                         <span className={`text-[11px] font-mono ${proposta.dados.briefing.cliente ? 'text-emerald-600' : 'text-red-400'}`}>
                             {proposta.dados.briefing.cliente

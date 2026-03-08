@@ -204,6 +204,8 @@ export default function TemplateManager({
     const [expandedMascaraId, setExpandedMascaraId] = useState<string | null>(null);
     const [editingPaginas, setEditingPaginas] = useState<Record<string, PaginaConfig[]>>({});
     const [savingPaginas, setSavingPaginas] = useState<string | null>(null);
+    const [renamingMcId, setRenamingMcId] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState('');
 
     // Slot editor
     const [addingSlotKey, setAddingSlotKey] = useState<string | null>(null);
@@ -664,8 +666,55 @@ export default function TemplateManager({
 
     // ── Render ────────────────────────────────────────────────────────────────
 
+    async function handleRenomear() {
+        const novo = renameValue.trim();
+        if (!novo || !renamingMcId) return;
+        try {
+            await templateService.updateMascaraNome(renamingMcId, novo);
+            setMascaras(prev => prev.map(m => m.id === renamingMcId ? { ...m, nome: novo } : m));
+        } catch (err: any) { setError(err.message); }
+        setRenamingMcId(null);
+    }
+
     return (
         <div className="max-w-6xl mx-auto mt-2">
+
+            {/* Modal renomear máscara */}
+            {renamingMcId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
+                        <div className="flex items-center gap-3 px-5 py-4 bg-orange-500">
+                            <span className="text-white text-lg">✏️</span>
+                            <p className="text-sm font-bold text-white flex-1">Renomear Máscara</p>
+                            <button onClick={() => setRenamingMcId(null)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <input
+                                autoFocus
+                                value={renameValue}
+                                onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleRenomear(); if (e.key === 'Escape') setRenamingMcId(null); }}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                placeholder="Nome da máscara"
+                            />
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleRenomear}
+                                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+                                >
+                                    Salvar
+                                </button>
+                                <button
+                                    onClick={() => setRenamingMcId(null)}
+                                    className="flex-1 border border-gray-200 text-gray-500 hover:text-gray-700 text-sm py-2 rounded-lg transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Page header */}
             <div className="mb-5 pl-1 flex items-start justify-between gap-3">
@@ -846,11 +895,17 @@ export default function TemplateManager({
                                                         <span className="text-xs font-bold text-red-600">PDF</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-sm text-gray-800">
-                                                            {mc.nome}
+                                                        <p className="font-semibold text-sm text-gray-800 flex items-center gap-1.5">
+                                                            <span className="truncate">{mc.nome}</span>
                                                             {mc.formato && (
-                                                                <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">{mc.formato}</span>
+                                                                <span className="shrink-0 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">{mc.formato}</span>
                                                             )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setRenamingMcId(mc.id); setRenameValue(mc.nome); }}
+                                                                className="shrink-0 text-gray-300 hover:text-orange-500 transition-colors"
+                                                                title="Renomear máscara"
+                                                            >✏️</button>
                                                         </p>
                                                         <p className="text-xs text-gray-400 mt-0.5">
                                                             {totalPaginas > 0 ? `${totalPaginas} página(s)` : 'Páginas não detectadas'}
