@@ -144,7 +144,7 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
             const mascaras = await templateService.getMascaras();
             const mc = mascaraId
                 ? (mascaras.find(m => m.id === mascaraId) ?? null)
-                : null;
+                : mascaras[0] ?? null;
             setMascara(mc);
             if (mc) {
                 const savedData = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
@@ -277,7 +277,6 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
                                         fieldKey: FIELD_OPTIONS[0].key, scriptName: SCRIPT_OPTIONS[0].name,
                                     };
                                     const mode = def.mode ?? 'text';
-                                    const isImagem = slot.tipo === 'imagem';
                                     // Painel completo só para modo texto/campo
                                     const showStyle = mode !== 'script';
                                     // Scripts que aceitam estilo tipográfico (não são imagem)
@@ -295,10 +294,6 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
                                                     <p className="text-xs font-mono font-semibold text-gray-700 truncate" title={fullName}>
                                                         {fullName}
                                                     </p>
-                                                    <span className={`inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${isImagem ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-                                                        }`}>
-                                                        {slot.tipo}
-                                                    </span>
                                                 </div>
 
                                                 {/* Seletor de modo: Texto / Campo / Script */}

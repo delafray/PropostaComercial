@@ -249,6 +249,16 @@ export default function TemplateManager({
             setMascaras(mc);
             setBackdrops(bd);
             setReferencias(rf);
+            // Auto-expandir a primeira máscara por padrão (quando não há edição específica)
+            if (!mascaraIdParaEditar && mc.length > 0) {
+                const first = mc[0];
+                setExpandedMascaraId(first.id);
+                setEditingPaginas({
+                    [first.id]: first.paginas_config?.length
+                        ? first.paginas_config.map((p: PaginaConfig) => ({ ...p, slots: p.slots ?? [] }))
+                        : [{ pagina: 1, descricao: '', slots: [] }],
+                });
+            }
         } catch (e: unknown) {
             setError((e as Error).message);
         } finally {
@@ -639,8 +649,16 @@ export default function TemplateManager({
     // ── Tab config ────────────────────────────────────────────────────────────
 
     const tabs: { key: Tab; label: string; count: number; desc: string }[] = [
-        { key: 'mascara', label: 'Máscaras PDF', count: mascaras.length, desc: 'Réguas de diagramação (referência interna)' },
-        { key: 'backdrop', label: 'Fundos', count: backdrops.length, desc: 'Imagens de fundo das páginas da proposta' },
+        {
+            key: 'mascara', label: 'Máscaras PDF',
+            count: mascaraIdParaEditar ? mascaras.filter((m: TemplateMascara) => m.id === mascaraIdParaEditar).length : mascaras.length,
+            desc: 'Réguas de diagramação (referência interna)',
+        },
+        {
+            key: 'backdrop', label: 'Fundos',
+            count: mascaraIdParaEditar ? backdrops.filter((b: TemplateBackdrop) => b.mascara_id === mascaraIdParaEditar).length : backdrops.length,
+            desc: 'Imagens de fundo das páginas da proposta',
+        },
         { key: 'referencia', label: 'Iscas OpenCV', count: referencias.length, desc: 'Recortes para busca nas Plantas Baixas' },
     ];
 
@@ -962,9 +980,9 @@ export default function TemplateManager({
                                                                                 </div>
 
                                                                                 {/* ── Fundo da página (gerente configura) ── */}
-                                                                                <div className="border-t border-gray-100 px-3 py-2 bg-white">
-                                                                                    <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
-                                                                                        Fundo fixo
+                                                                                <div className="border-t-2 border-red-700 px-3 py-2.5 bg-red-50">
+                                                                                    <label className="text-[11px] font-black text-red-700 uppercase tracking-wider block mb-1.5" style={{ letterSpacing: '0.08em' }}>
+                                                                                        🎨 Fundo Fixo
                                                                                     </label>
                                                                                     <select
                                                                                         value={editingPaginas[mc.id]?.[idx]?.backdrop_id ?? ''}
@@ -977,7 +995,7 @@ export default function TemplateManager({
                                                                                                 ),
                                                                                             }));
                                                                                         }}
-                                                                                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:border-orange-400"
+                                                                                        className="w-full border-2 border-red-600 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:border-red-800 font-semibold text-gray-800"
                                                                                     >
                                                                                         <option value="">— Sem fundo —</option>
                                                                                         {backdrops
@@ -995,13 +1013,7 @@ export default function TemplateManager({
                                                                                         <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
                                                                                             Slots de conteúdo
                                                                                         </p>
-                                                                                        {!isAddingSlot && (
-                                                                                            <button
-                                                                                                onClick={() => setAddingSlotKey(slotKey)}
-                                                                                                className="text-[10px] font-semibold text-orange-600 hover:text-orange-800">
-                                                                                                + Adicionar
-                                                                                            </button>
-                                                                                        )}
+                                                                                        {/* + Adicionar slot — oculto (usar Detectar) */}
                                                                                     </div>
 
                                                                                     {/* Lista de slots */}
@@ -1020,9 +1032,7 @@ export default function TemplateManager({
                                                                                                     <span className="text-gray-400 font-mono shrink-0 hidden sm:inline">
                                                                                                         {slot.x_mm},{slot.y_mm}
                                                                                                     </span>
-                                                                                                    <button
-                                                                                                        onClick={() => deleteSlot(mc.id, idx, si)}
-                                                                                                        className="text-red-400 hover:text-red-600 shrink-0 ml-1">✕</button>
+                                                                                                    {/* botão excluir slot — oculto */}
                                                                                                 </div>
                                                                                             ))}
                                                                                         </div>

@@ -343,10 +343,8 @@ export default function PropostaComercial() {
     setMascaraNomeParaEditar('');
   }
 
-  // Título só reflete a sessão de edição quando está na aba Templates
   const modoEdicao = !!(mascaraIdParaEditar && mascaraNomeParaEditar);
-  const emTemplates = view === 'templates';
-  const pageTitle = emTemplates && modoEdicao
+  const pageTitle = modoEdicao
     ? `Editando Máscara: ${mascaraNomeParaEditar}`
     : 'Proposta Comercial';
 

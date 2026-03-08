@@ -406,7 +406,6 @@ async function matchTemplate(plantaFile: File, ref: TemplateReferencia): Promise
             score: bestNcc,
         };
     } catch (e) {
-        console.warn(`OCV match falhou para "${ref.nome_item}":`, e);
         return null;
     }
 }
@@ -766,11 +765,9 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                             map[slot.nome] = nomeProjetista;
                         } else if (slotDef?.scriptName === 'pv_texto') {
                             const pvSec = extrairSecaoMemorial(localMemorial, 'impressão digital');
-                            if (!pvSec) console.warn('[pv_texto] Seção "impressão digital" não encontrada no memorial.');
                             map[slot.nome] = pvSec;
                         } else if (slotDef?.scriptName === 'eletrica') {
                             const elSec = extrairSecaoMemorial(localMemorial, 'elétrica');
-                            if (!elSec) console.warn('[eletrica] Seção "elétrica" não encontrada no memorial.');
                             map[slot.nome] = elSec;
                         }
                         // script 'projeto' é tratado no loop de páginas (imagem), não aqui
@@ -1264,7 +1261,6 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                                     'FAST'
                                 );
                             } catch (imgErr) {
-                                console.warn(`Render ${ri + 1} não carregado:`, imgErr);
                             }
                         }
 
@@ -1341,11 +1337,13 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         if (imagemEstandeSlot) {
                             const arquivoEstande = arquivosLocais.find(f => /\d+[,.]\d+m/i.test(f.name));
                             if (arquivoEstande && /\.png$/i.test(arquivoEstande.name)) {
-                                const tamanho = proposta?.dados?.pasta?.tamanhoEstande ?? '';
+                                // Banco primeiro; fallback: extrai direto do nome do arquivo (ex: "altura_4,00m.png" → "4,00m")
+                                const tamanhoDb = proposta?.dados?.pasta?.tamanhoEstande ?? '';
+                                const tamanhoArquivo = (() => { const m = /(\d+)[,.](\d+)\s*m/i.exec(arquivoEstande.name); return m ? `${m[1]},${m[2]}m` : ''; })();
+                                const tamanho = tamanhoDb || tamanhoArquivo;
                                 try {
                                     await renderImagemEstande(doc, imagemEstandeSlot, arquivoEstande, tamanho);
                                 } catch (e) {
-                                    console.warn('[imagem_estande] Falha ao renderizar:', e);
                                 }
                             }
                         }
@@ -1358,7 +1356,6 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                                 const { data, format } = await fetchBase64(url);
                                 doc.addImage(data, format, pvS.x_mm, pvS.y_mm, pvS.w_mm, pvS.h_mm, undefined, 'FAST');
                             } catch (e) {
-                                console.warn('[programacao_visual] Falha ao renderizar slot:', slotId, e);
                             }
                         }
 

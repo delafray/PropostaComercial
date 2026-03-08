@@ -17,11 +17,8 @@ import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export default function NovaPropostaPage({ onSaved, isAdmin, onAbrirTemplates, onCriarMascara }: {
+export default function NovaPropostaPage({ onSaved }: {
     onSaved?: () => void;
-    isAdmin?: boolean;
-    onAbrirTemplates?: () => void;
-    onCriarMascara?: (formato: 'A4' | '16:9', nome: string) => void;
 } = {}) {
     const [mascara, setMascara] = useState<TemplateMascara | null>(null);
     const [listaMascaras, setListaMascaras] = useState<TemplateMascara[]>([]);
@@ -44,9 +41,6 @@ export default function NovaPropostaPage({ onSaved, isAdmin, onAbrirTemplates, o
     const [memorialTexto, setMemorialTexto] = useState<string | null>(null);
     // campos que foram auto-preenchidos pelo briefing (set de slotIds)
     const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
-
-    // Diagnóstico do parser
-    const [debugParse, setDebugParse] = useState<string>('');
 
     // Loader de processamento de Pasta
     const [loadingPasta, setLoadingPasta] = useState(false);
@@ -612,23 +606,9 @@ export default function NovaPropostaPage({ onSaved, isAdmin, onAbrirTemplates, o
                                                 {mc.formato && <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-orange-100 text-orange-700 shrink-0">{mc.formato}</span>}
                                                 {mascara?.id === mc.id && <span className="text-[10px] text-orange-500 font-bold shrink-0">✓ Ativa</span>}
                                             </button>
-                                            {isAdmin && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setShowMascaraModal(false); onAbrirTemplates?.(); }}
-                                                    className="ml-3 shrink-0 text-xs text-blue-600 font-semibold px-2 py-1 rounded border border-blue-200 hover:bg-blue-50 transition-colors"
-                                                >Editar</button>
-                                            )}
                                         </div>
                                     ))}
                                 </div>
-                                {isAdmin && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setNovaMcStep('format')}
-                                        className="w-full py-2.5 border-2 border-dashed border-orange-300 text-orange-700 text-sm font-semibold rounded-lg hover:bg-orange-50 transition-colors"
-                                    >➕ Nova Máscara</button>
-                                )}
                             </div>
                         )}
 
@@ -755,17 +735,6 @@ export default function NovaPropostaPage({ onSaved, isAdmin, onAbrirTemplates, o
                     </div>
                 )}
 
-                {/* Diagnóstico briefing — sempre visível após abrir pasta */}
-                {debugParse && (
-                    <div className={`mb-3 p-3 border rounded-lg text-xs ${briefingData?.cliente ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                        <p className={`font-bold mb-1 ${briefingData?.cliente ? 'text-emerald-700' : 'text-red-700'}`}>
-                            {briefingData?.cliente ? '✓ Briefing OK' : '⚠ Briefing: cliente=null — diagnóstico:'}
-                        </p>
-                        <pre className={`text-[10px] overflow-auto max-h-48 whitespace-pre-wrap break-all ${briefingData?.cliente ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {debugParse}
-                        </pre>
-                    </div>
-                )}
 
                 {projeto && (
                     <div>

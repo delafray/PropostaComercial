@@ -26,7 +26,6 @@ export async function parseMascaraPdf(
   file: File,
   onProgress?: (pct: number, label: string) => void
 ): Promise<PaginaConfig[]> {
-  console.log('[Parser] Iniciando parse de:', file.name);
   try {
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -51,7 +50,6 @@ export async function parseMascaraPdf(
         const w = maxX - minX, h = maxY - minY;
         if (w < 1 || h < 1) return;
         if (!isSaturatedColor(fillR, fillG, fillB)) return;
-        console.log(`[Parser] p${pi + 1} PATH color=rgb(${fillR.toFixed(0)},${fillG.toFixed(0)},${fillB.toFixed(0)}) dims=${w.toFixed(0)}x${h.toFixed(0)}`);
         shapes.push({ x: minX, y: minY, w, h, cat: 'slot' });
       };
 
@@ -102,7 +100,6 @@ export async function parseMascaraPdf(
               const rw = coords[ci + 2], rh = coords[ci + 3];
               ci += 4;
               if (!isSaturatedColor(fillR, fillG, fillB)) continue;
-              console.log(`[Parser] p${pi + 1} RE color=rgb(${fillR.toFixed(0)},${fillG.toFixed(0)},${fillB.toFixed(0)}) dims=${rw.toFixed(0)}x${rh.toFixed(0)}`);
               shapes.push({ x: rx, y: ry, w: rw, h: rh, cat: 'slot' });
 
             } else if (op === pdfjsLib.OPS.moveTo) {
@@ -126,9 +123,6 @@ export async function parseMascaraPdf(
           tryAdd(sub); // sub-path final não fechado explicitamente
         }
       }
-
-      const coresEncontradas = [...new Set(shapes.map(s => s.cat))];
-      console.log(`[Parser] Pág ${pi + 1}: ${shapes.length} shapes | cores: ${coresEncontradas.join(', ') || 'nenhuma'}`);
 
       // Ordena: maior Y primeiro (mais alto na página), desempata por X
       shapes.sort((a, b) => (b.y - a.y) || (a.x - b.x));
