@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Paginação Invisível, "Scroll Infinito" e Metadados (React + Supabase)
 
 > **Objetivo Final:** Ensinar a IA que NUNCA se deve baixar 1.000 ou 10.000 registros de um Banco de Dados de uma só vez para o celular do usuário. Essa arquitetura destrói a memória RAM do aparelho, estoura o plano de dados 4G e encarece a fatura do servidor. O sistema deve usar Paginação baseada em cursores (ou Range limits), acionada por um "Scroll Infinito" mágico que carrega os itens conforme a pessoa desce a tela, *enquanto* um cabeçalho fixo exibe o número total de itens e permite "Selecionar Todos" virtualmente.

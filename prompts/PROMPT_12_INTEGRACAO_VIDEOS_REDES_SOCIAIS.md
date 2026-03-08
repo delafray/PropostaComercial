@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Integração Oculta de Redes Sociais no Banco (Bypassing CORS)
 
 > **Objetivo Final:** Ensinar a Inteligência Artificial a NUNCA extrair miniaturas (Thumbnails/Capa) de redes sociais ou servidores de bloqueio de terceiros usando o Navegador do Cliente puro (Front-end). Redes como Instagram ou APIs Fechadas irão jogar na cara do sistema um erro de `CORS Block` ou expirar chaves públicas. A IA deve arquitetar um Servidor Oculto Neutro (Proxy Back-end / Edge Function do Supabase) que faz o roubo silencioso do conteúdo de forma confiável e com alta tolerância a falhas.

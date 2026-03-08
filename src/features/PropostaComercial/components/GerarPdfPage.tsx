@@ -1,3 +1,4 @@
+// !! REGRA N1: JAMAIS apague/mova arquivos fora de C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\ — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
@@ -47,12 +48,9 @@ async function rasterizarSvg(svgText: string, wMm: number, hMm: number): Promise
         const img = new Image();
         const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(blob);
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            URL.revokeObjectURL(url);
-            resolve(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao rasterizar SVG do backdrop')); };
+        const tid = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Timeout ao rasterizar SVG')); }, 15000);
+        img.onload = () => { clearTimeout(tid); ctx.drawImage(img, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(url); resolve(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]); };
+        img.onerror = () => { clearTimeout(tid); URL.revokeObjectURL(url); reject(new Error('Falha ao rasterizar SVG do backdrop')); };
         img.src = url;
     });
 }
@@ -116,8 +114,9 @@ async function getImageNaturalSize(file: File): Promise<{ w: number; h: number }
     return new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
-        img.onload = () => { URL.revokeObjectURL(url); resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não foi possível ler dimensões da planta')); };
+        const tid = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Timeout ao ler dimensões da imagem')); }, 15000);
+        img.onload = () => { clearTimeout(tid); URL.revokeObjectURL(url); resolve({ w: img.naturalWidth, h: img.naturalHeight }); };
+        img.onerror = () => { clearTimeout(tid); URL.revokeObjectURL(url); reject(new Error('Não foi possível ler dimensões da planta')); };
         img.src = url;
     });
 }
@@ -136,7 +135,9 @@ async function renderImagemEstande(
     const originalCanvas = await new Promise<HTMLCanvasElement>((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
+        const tid = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Timeout ao carregar imagem do estande')); }, 15000);
         img.onload = () => {
+            clearTimeout(tid);
             const c = document.createElement('canvas');
             c.width = img.naturalWidth;
             c.height = img.naturalHeight;
@@ -144,7 +145,7 @@ async function renderImagemEstande(
             URL.revokeObjectURL(url);
             resolve(c);
         };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem do estande')); };
+        img.onerror = () => { clearTimeout(tid); URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem do estande')); };
         img.src = url;
     });
 
@@ -268,7 +269,9 @@ async function grayscaleBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
+        const tid = setTimeout(() => { URL.revokeObjectURL(url); reject(new Error('Timeout ao processar planta (grayscale)')); }, 15000);
         img.onload = () => {
+            clearTimeout(tid);
             const canvas = document.createElement('canvas');
             canvas.width = img.naturalWidth;
             canvas.height = img.naturalHeight;
@@ -285,7 +288,7 @@ async function grayscaleBase64(file: File): Promise<string> {
             URL.revokeObjectURL(url);
             resolve(canvas.toDataURL('image/png').split(',')[1]);
         };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Erro ao carregar planta')); };
+        img.onerror = () => { clearTimeout(tid); URL.revokeObjectURL(url); reject(new Error('Erro ao carregar planta')); };
         img.src = url;
     });
 }
@@ -294,14 +297,16 @@ function loadCanvasFromUrl(url: string): Promise<HTMLCanvasElement> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
+        const tid = setTimeout(() => reject(new Error('Timeout ao carregar imagem de referência')), 15000);
         img.onload = () => {
+            clearTimeout(tid);
             const c = document.createElement('canvas');
             c.width = img.naturalWidth;
             c.height = img.naturalHeight;
             c.getContext('2d')!.drawImage(img, 0, 0);
             resolve(c);
         };
-        img.onerror = reject;
+        img.onerror = () => { clearTimeout(tid); reject(new Error('Falha ao carregar imagem de referência')); };
         img.src = url;
     });
 }
@@ -515,11 +520,12 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
     async function loadData() {
         try {
             setLoading(true);
-            const [mascaras, bd, propostas, refs] = await Promise.all([
+            const [mascaras, bd, propostas, refs, handle] = await Promise.all([
                 templateService.getMascaras(),
                 templateService.getBackdrops(),
                 propostaService.getPropostas(),
                 templateService.getReferencias().catch(() => []),
+                suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
             ]);
             setReferenciasOCV(refs as TemplateReferencia[]);
             const mc = forceMascaraId
@@ -527,25 +533,29 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 : mascaras[0] ?? null;
             setMascara(mc);
             setBackdrops(bd);
-            setProposta(propostas[0] ?? null);
+
+            // Proposta vinculada à pasta ativa — NUNCA usar propostas[0] pois contamina
+            // com dados de pasta anterior quando o usuário troca de pasta sem briefing.
+            const folderName = handle?.name ?? null;
+            const propostaAtual = folderName
+                ? (propostas.find((p: any) => p.dados?.pasta?.nome === folderName) ?? null)
+                : null;
+            setProposta(propostaAtual);
 
             if (mc) {
                 const savedDefs = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
                 setSlotDefaults((savedDefs as SlotDefaults) ?? {});
             }
 
-            if (suportaFSA()) {
-                const handle = await carregarHandle().catch(() => null);
-                if (handle) {
-                    setPastaHandle(handle);
-                    const perm = await (handle as any).queryPermission({ mode: 'read' });
-                    if (perm === 'granted') {
-                        const files = await lerArquivos(handle);
-                        setArquivosLocais(files);
-                        setNeedsPermission(false);
-                    } else {
-                        setNeedsPermission(true);
-                    }
+            if (handle) {
+                setPastaHandle(handle);
+                const perm = await (handle as any).queryPermission({ mode: 'read' });
+                if (perm === 'granted') {
+                    const files = await lerArquivos(handle);
+                    setArquivosLocais(files);
+                    setNeedsPermission(false);
+                } else {
+                    setNeedsPermission(true);
                 }
             }
 
@@ -620,35 +630,34 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 }
             }
 
-            // ── Memorial local (fonte de verdade: arquivo .txt da pasta) ─────────
-            // Pasta disponível mas sem .txt → string vazia (não usa dado salvo no BD).
-            // Sem pasta → fallback para o memorial salvo no BD.
+            // ── Regra de isolamento de dados ─────────────────────────────────────
+            // autoGenerate (overlay via MascarasPage): pasta SEMPRE é fonte de verdade.
+            //   arquivos vazios → sem acesso à pasta → tudo em branco, NUNCA usa BD.
+            // Standalone (aba Gerar PDF): sem pasta → fallback para BD é aceitável.
+            const usarFallbackBD = !autoGenerate;
+
+            // ── Memorial local ────────────────────────────────────────────────────
             let localMemorial = '';
             if (arquivos.length > 0) {
                 const txtFile = arquivos.find(f => /\.txt$/i.test(f.name));
                 if (txtFile) {
                     try { localMemorial = await txtFile.text(); } catch { /* silent */ }
                 }
-            } else {
+            } else if (usarFallbackBD) {
                 localMemorial = proposta?.dados?.memorial ?? '';
             }
 
-            // ── Tamanho do estande local (fonte de verdade: arquivo na pasta) ────
-            // Mesma lógica: pasta disponível → extrai dos nomes dos arquivos locais.
-            // Sem pasta → extrai dos nomes salvos no BD.
+            // ── Tamanho do estande local ──────────────────────────────────────────
             let localTamanhoEstande = '';
             const fonteNomesArquivos = arquivos.length > 0
                 ? arquivos.map(f => f.name)
-                : (proposta?.dados?.pasta?.arquivos ?? []);
+                : (usarFallbackBD ? (proposta?.dados?.pasta?.arquivos ?? []) : []);
             for (const nome of fonteNomesArquivos) {
                 const m = nome.match(/(\d+)[,.](\d+)m/i);
                 if (m) { localTamanhoEstande = `${m[1]},${m[2]}m`; break; }
             }
 
-            // ── Briefing local (fonte de verdade: arquivo PDF da pasta) ──────────
-            // Pasta disponível mas sem PDF de briefing → null → todos os campos vazios.
-            // NUNCA usar dado de outro cliente salvo no BD quando a pasta está carregada.
-            // Sem pasta → fallback para o briefing salvo no BD.
+            // ── Briefing local ────────────────────────────────────────────────────
             let localBriefing: import('../types').BriefingData | null = null;
             if (arquivos.length > 0) {
                 const pdfBriefing = arquivos.find(f => /^\d{4,5}\.pdf$/i.test(f.name));
@@ -658,15 +667,14 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         localBriefing = await parseBriefingPdf(pdfBriefing);
                     } catch { localBriefing = null; }
                 }
-                // sem PDF → localBriefing permanece null → campos em branco
-            } else {
+            } else if (usarFallbackBD) {
                 localBriefing = proposta?.dados?.briefing ?? null;
             }
 
             // ── Valores manuais de slots (paginas) ───────────────────────────────
-            // Pasta carregada → ignora valores manuais do BD (podem ser de outro projeto).
-            // Sem pasta → usa os valores salvos no BD para geração standalone.
-            const localPaginas = arquivos.length > 0 ? null : (proposta?.dados?.paginas ?? null);
+            const localPaginas = (arquivos.length > 0 || !usarFallbackBD)
+                ? null
+                : (proposta?.dados?.paginas ?? null);
 
             // ── Auto-fill a partir do briefing ───────────────────────────────
 
@@ -1378,7 +1386,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             setProgress('');
 
         } catch (e: any) {
-            setError(`Erro ao gerar PDF: ${e.message}`);
+            setError(`Erro ao gerar PDF: ${e?.message || String(e) || 'erro desconhecido'}`);
             setProgress('');
         } finally {
             // Libera Object URLs sempre — mesmo se geração falhar no meio

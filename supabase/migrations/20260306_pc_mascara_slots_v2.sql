@@ -1,3 +1,4 @@
+-- !! REGRA N1: JAMAIS apague/mova arquivos fora de C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\ — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
 -- ============================================================
 -- Mascara_Comercial — Slots semânticos v2
 -- Substitui nomes genéricos (slot_1, footer_4…) por nomes

@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Mapeamento Dinâmico de PDFs e Configuração de Slots Semânticos (v2)
 
 > **Objetivo Final:** Ensinar a IA a arquitetar um sistema de geração de PDFs onde os campos não são "fixos" no código, mas baseados em **Slots Semânticos**. Isso permite que o usuário altere layouts (Máscaras) no banco de dados sem quebrar o preenchimento automático de dados vindos de um Briefing (Excel/JSON) e permite a configuração de valores padrão (Defaults) e tamanhos de fonte customizados por usuário.

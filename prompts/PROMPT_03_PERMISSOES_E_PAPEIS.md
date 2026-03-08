@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Gestão de Perfis de Acesso (RBAC) e RLS com Supabase e React
 
 > **Objetivo Final:** Este documento instrui a IA sobre como implementar um sistema robusto de Role-Based Access Control (RBAC) integrado com o Row Level Security (RLS) do Supabase. O objetivo é garantir que a segurança dos dados ocorra na camada do Banco de Dados e reflita corretamente na Interface React.

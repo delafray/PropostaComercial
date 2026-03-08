@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Implementação de Autenticação Biométrica Segura (Passkeys/WebAuthn) com Supabase e React
 
 > **Objetivo Final:** Este documento contém todo o histórico, arquitetura, soluções de bugs críticos e regras de negócio para que uma IA consiga implementar "Biometria Passwordless" (Entrar com Digital/Face ID) de forma 100% segura e livre de atritos em aplicações React (Mobile First) integradas com Supabase Edge Functions.

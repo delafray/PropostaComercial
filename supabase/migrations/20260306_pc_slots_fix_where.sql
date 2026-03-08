@@ -1,3 +1,4 @@
+-- !! REGRA N1: JAMAIS apague/mova arquivos fora de C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\ — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
 -- ============================================================
 -- FIX: Slots semânticos + backdrop_ids para máscara "Comercial"
 -- Corrige o WHERE da v2 que não batia com o nome real no banco.

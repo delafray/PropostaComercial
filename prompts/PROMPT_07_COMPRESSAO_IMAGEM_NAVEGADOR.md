@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Compressão de Imagens Pesadas no Navegador (React + Canvas 2D)
 
 > **Objetivo Final:** Ensinar a IA a NUNCA jogar imagens em tamanho original (bruto) num banco de dados, balde de armazenamento (Storage AWS S3/Supabase) ou fazer upload via rede móvel lenta. A Inteligência Artificial será instruída a criar um funil de compactação que intercepta a foto do usuário através de um `<canvas>` 2D virtual, redimensionando as dimensões máximas e re-codificando em JPEG com qualidade otimizada antes de o arquivo sequer pisar no servidor.

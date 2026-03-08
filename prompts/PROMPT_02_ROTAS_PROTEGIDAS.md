@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Rotas Protegidas no React (Protected Routes) com Supabase Auth
 
 > **Objetivo Final:** Ensinar a IA a criar um sistema de autenticação fluído em uma Single Page Application (SPA), garantindo que usuários deslogados sejam redirecionados e que a interface não pisque (flicker) entre views.

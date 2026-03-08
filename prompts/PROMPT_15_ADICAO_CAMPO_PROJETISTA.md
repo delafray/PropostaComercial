@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # 🛠️ PROMPT: Adição de Campo "Projetista Responsável" no Perfil de Usuário
 
 **Objetivo:** Adicionar um campo de texto livre chamado `projetista` à tabela de usuários, permitindo que cada perfil tenha um responsável técnico associado, com suporte completo no Banco de Dados (Supabase), Tipagem (TypeScript), Serviços (CRUD) e Interface (React).

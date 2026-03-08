@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Padronização de Componentes UI (React + Tailwind CSS)
 
 > **Objetivo Final:** Ensinar a IA a criar um Design System enxuto focado em consistência de Botões, Inputs e Cards. O princípio arquitetônico é **acabar com a "Salada de Classes" Tailwind espalhada no código**, onde cada botão na tela tem tamanhos, cores ou comportamentos (`hover`/`disabled`) diferentes. A Inteligência Artificial será instruída a centralizar regras matemáticas puras em um único arquivo `UI.tsx`.

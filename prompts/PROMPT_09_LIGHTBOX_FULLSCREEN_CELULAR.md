@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Visualizador de Imagens Tela Cheia Mobile (Pinch-to-Zoom Lightbox)
 
 > **Objetivo Final:** Ensinar a IA a não depender de bibliotecas pesadas e desatualizadas do NPM (como `react-image-lightbox`) para permitir que fotos abram em tela cheia na sua aplicação Mobile. IAs tem vício de embutir bibliotecas velhas para resolver Lightboxes. Este prompt força a Inteligência Artificial a criar um `<div fixed>` limpo com matemática de eixos Puros (`transform: scale() translate()`) suportando Pinch-To-Zoom de 2 dedos, Drag (Arrastar Imagem Ampliada) e Fechamento Rápido.

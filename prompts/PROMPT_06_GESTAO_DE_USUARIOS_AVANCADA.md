@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Gestão Avançada de Usuários e Gerador de Acessos Temporários (React + Supabase)
 
 > **Objetivo Final:** Ensinar a IA a arquitetar uma tela de Administração de Usuários incrivelmente sofisticada. O problema comum é IAs criarem telas "CRUD Básicas" (um formulário longo e chato de checkboxes). Este prompt dita como construir uma **Grade de Funções Assimétrica** visual e um **Gerador de Usuários Temporários** (com expiração automática e botão de compartilhar no WhatsApp) para encantar o cliente.

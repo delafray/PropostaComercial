@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # 📸 Galeria de Fotos - Gestão de Projetos (v2025)
 
 Sistema de alta performance para gestão de fotos e vídeos de projetos, com organização hierárquica por tags e categorias. Construído e modularizado sob a arquitetura **Backend Specialist v2025**.

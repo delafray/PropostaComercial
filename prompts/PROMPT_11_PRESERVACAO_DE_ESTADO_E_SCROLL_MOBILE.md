@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Preservação Blindada de Estado e Scroll no Mobile (React)
 
 > **Objetivo Final:** Evitar que Rascunhos de Formulários Longos ou a Posição de Rolagem Infinita de uma Galeria sejam apagados quando o usuário do Celular (iPhone/Android) minimiza o navegador temporariamente para checar o WhatsApp. IAs costumam salvar coisas no `useState` cru, o que é destruído no descarte de memória do navegador móvel. Este prompt ensina a IA a fazer cache automático na Web Storage (Session/Local) atrelado a um "Debounce" invisível e a travar a posição do eixo Y do usuário.

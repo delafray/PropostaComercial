@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Sistema Global de Alertas e Confirmações Táticas (React)
 
 > **Objetivo Final:** Ensinar a IA a banir o uso das famosas (e feias) janelas padrão do navegador (`window.alert` e `window.confirm`). A Inteligência Artificial será instruída a instanciar um Singleton de Modal Estético Global via Provider Contexto ou simplesmente importar um modal local de ponta que emita diferentes sinais visuais e sensoriais baseados no estado (Info, Sucesso, Alerta Vermelho de Perigo, e Confirmação Dupla para Destruição de Dados).

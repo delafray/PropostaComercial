@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Prompt Master: Proteção de Botão Voltar (Mobile Back Button) no React SPA
 
 > **Objetivo Final:** Ensinar a IA a interceptar com segurança o botão "Voltar" nativo dos sistemas operacionais móveis (Android e PWA iOS) rodando um Single Page Application (SPA), impedindo saídas acidentais ou deslogamentos forçados do App sem criar loops infinitos no histórico.

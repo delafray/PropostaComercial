@@ -1,3 +1,5 @@
+**⛔ REGRA N1:** JAMAIS apague/mova arquivos fora de `C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\` — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
+
 # Mapa de Scripts - Proposta Comercial
 
 Este documento é a referência oficial de todos os scripts usados nos slots. Para pedir alterações ou novos scripts, mencione o nome exato (ex: `projeto`, `hoje`).
