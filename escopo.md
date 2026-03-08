@@ -1,6 +1,31 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Sistema Multi-Módulo: gestão completa de módulos (Nova / Editar / Excluir)**
+
+### Fluxo "Nova Máscara" (reescrito)
+- Modal cria o registro em `pc_templates_mascara` imediatamente (`url_mascara_pdf: ''`, `paginas_config: []`)
+- Tela de sucesso: "Módulo Criado!" + botão único "Ir para Edição" → abre TemplateManager no módulo criado
+- Removidos estados órfãos `templatePreNome` / `templatePreFormato` e função `abrirNovaMascara`
+
+### "Editar Máscara" e "Excluir Máscara" (modais redesenhados)
+- Ambos usam `<select>` com opção nula padrão — nenhuma ação acontece sem seleção explícita
+- "Excluir" tem 2 passos: seleção → confirmação com aviso de irreversibilidade
+
+### `deleteModuloCompleto(id)` em templateService
+- Deleta arquivos dos fundos do storage + registros `pc_templates_backdrop`
+- Deleta PDF da máscara do storage + registro `pc_templates_mascara`
+- Limpa `pc_user_prefs` para `slot_defaults_{id}`
+
+### `deletePref(chave)` em prefService
+- Novo método para remoção de preferências por chave
+
+### Migration aplicada
+- `20260307_pc_backdrop_mascara_id.sql` — atribuiu fundos com `mascara_id = null` ao módulo mais antigo
+
+---
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
 **Fix: título e forceMascaraId contaminando outras abas**
 - `forceMascaraId` removido do GerarPdfPage regular — aba Gerar PDF usa seleção própria
 - Título "Editando Máscara: X" agora só aparece quando `view === 'templates'`

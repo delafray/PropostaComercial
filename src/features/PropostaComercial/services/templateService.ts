@@ -1,6 +1,9 @@
 // @ts-nocheck
 import { supabase } from '../../../../services/supabaseClient';
 import { TemplateBackdrop, TemplateMascara, TemplateReferencia, PaginaConfig } from '../types';
+import { prefService } from './prefService';
+
+const prefKeyForMascara = (mascaraId: string) => `slot_defaults_${mascaraId}`;
 
 const BUCKET = 'pc_arquivos';
 
@@ -56,6 +59,51 @@ export const templateService = {
         await this.deleteFileByUrl(fileUrl);
         const { error } = await supabase.from('pc_templates_mascara').delete().eq('id', id);
         if (error) throw new Error(error.message);
+    },
+
+    /**
+     * Exclui um módulo completo e todos os seus recursos:
+     * 1. Arquivos de fundo (storage) + registros pc_templates_backdrop
+     * 2. PDF da máscara (storage) + registro pc_templates_mascara
+     * 3. Preferências de slot (pc_user_prefs com chave slot_defaults_{id})
+     */
+    async deleteModuloCompleto(id: string): Promise<void> {
+        // 1. Busca todos os fundos do módulo
+        const { data: backdrops } = await supabase
+            .from('pc_templates_backdrop')
+            .select('id, url_imagem')
+            .eq('mascara_id', id);
+
+        // 2. Deleta cada arquivo de fundo do storage
+        if (backdrops && backdrops.length > 0) {
+            for (const b of backdrops) {
+                await this.deleteFileByUrl(b.url_imagem);
+            }
+            // 3. Deleta todos os registros de fundo de uma vez
+            await supabase.from('pc_templates_backdrop').delete().eq('mascara_id', id);
+        }
+
+        // 4. Busca o PDF da máscara para deletar do storage
+        const { data: mascara } = await supabase
+            .from('pc_templates_mascara')
+            .select('url_mascara_pdf')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (mascara?.url_mascara_pdf) {
+            await this.deleteFileByUrl(mascara.url_mascara_pdf);
+        }
+
+        // 5. Deleta o registro da máscara
+        const { error } = await supabase.from('pc_templates_mascara').delete().eq('id', id);
+        if (error) throw new Error(error.message);
+
+        // 6. Limpa as preferências de slot do módulo
+        try {
+            await prefService.deletePref(prefKeyForMascara(id));
+        } catch {
+            // Silencia erro de prefs — não crítico
+        }
     },
 
     async updateMascaraPdf(id: string, oldUrl: string, newFile: File): Promise<string> {

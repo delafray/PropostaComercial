@@ -169,11 +169,13 @@ export default function TemplateManager({
     preNome,
     preFormato,
     mascaraIdParaEditar,
+    onMascaraCriada,
 }: {
     autoOpenNew?: boolean;
     preNome?: string;
     preFormato?: 'A4' | '16:9';
     mascaraIdParaEditar?: string | null;
+    onMascaraCriada?: (id: string, nome: string) => void;
 } = {}) {
     const [activeTab, setActiveTab] = useState<Tab>('mascara');
     const [mascaras, setMascaras] = useState<TemplateMascara[]>([]);
@@ -186,7 +188,7 @@ export default function TemplateManager({
     // Backdrop form
     const [bdNome, setBdNome] = useState('');
     const [bdFile, setBdFile] = useState<File | null>(null);
-    const [bdMascaraId, setBdMascaraId] = useState('');
+    const [bdMascaraId, setBdMascaraId] = useState(mascaraIdParaEditar ?? '');
     const bdFileRef = useRef<HTMLInputElement>(null);
 
     // Máscara form
@@ -292,7 +294,7 @@ export default function TemplateManager({
                 tipo_arquivo: normalizeTipo(ext),
                 mascara_id: bdMascaraId || null,
             });
-            setBdNome(''); setBdFile(null); setBdMascaraId('');
+            setBdNome(''); setBdFile(null); setBdMascaraId(mascaraIdParaEditar ?? '');
             if (bdFileRef.current) bdFileRef.current.value = '';
             await loadAll();
         } catch (e: unknown) { setError((e as Error).message); }
@@ -316,10 +318,11 @@ export default function TemplateManager({
                 descricao: '',
                 slots: [],
             }));
-            await templateService.createMascara({ nome: mcNome, url_mascara_pdf: url, paginas_config, formato: mcFormato! });
+            const novaMascara = await templateService.createMascara({ nome: mcNome, url_mascara_pdf: url, paginas_config, formato: mcFormato! });
             setMcNome(''); setMcFile(null); setMcPaginasDetectadas(0); setMcFormato(null); setShowMcForm(false);
             if (mcFileRef.current) mcFileRef.current.value = '';
             await loadAll();
+            onMascaraCriada?.(novaMascara.id, novaMascara.nome);
         } catch (e: unknown) { setError((e as Error).message); }
         finally { setUploading(false); }
     }
@@ -977,6 +980,7 @@ export default function TemplateManager({
                                                                                     >
                                                                                         <option value="">— Sem fundo —</option>
                                                                                         {backdrops
+                                                                                            .filter(b => b.mascara_id === mc.id)
                                                                                             .map(b => (
                                                                                                 <option key={b.id} value={b.id}>{b.nome} ({b.tipo_arquivo})</option>
                                                                                             ))
@@ -1097,14 +1101,19 @@ export default function TemplateManager({
                             </form>
 
                             {/* Grid */}
-                            {loading ? (
-                                <p className="text-gray-400 text-sm">Carregando...</p>
-                            ) : backdrops.length === 0 ? (
-                                <EmptyState icon="🖼" title="Nenhum fundo cadastrado"
-                                    sub="Adicione as imagens de fundo da proposta (PNG, JPG, SVG)" />
-                            ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                    {backdrops.map(bd => (
+                            {(() => {
+                                const isNovaModo = !mascaraIdParaEditar && !!(preNome || preFormato);
+                                const visibles = mascaraIdParaEditar
+                                    ? backdrops.filter(b => b.mascara_id === mascaraIdParaEditar)
+                                    : isNovaModo ? [] : backdrops;
+                                return loading ? (
+                                    <p className="text-gray-400 text-sm">Carregando...</p>
+                                ) : visibles.length === 0 ? (
+                                    <EmptyState icon="🖼" title="Nenhum fundo cadastrado"
+                                        sub="Adicione as imagens de fundo da proposta (PNG, JPG, SVG)" />
+                                ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                        {visibles.map(bd => (
                                         <div key={bd.id}
                                             className="border border-gray-200 rounded-lg overflow-hidden group hover:shadow-md hover:border-gray-300 transition-all">
                                             <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
@@ -1126,7 +1135,8 @@ export default function TemplateManager({
                                         </div>
                                     ))}
                                 </div>
-                            )}
+                            );
+                        })()}
                         </div>
                     )}
 

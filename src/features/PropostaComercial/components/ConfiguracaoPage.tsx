@@ -135,15 +135,15 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
     const [error, setError] = useState('');
     const [defaults, setDefaults] = useState<SlotDefaults>({});
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(); }, [mascaraId]);
 
     async function loadData() {
         try {
             setLoading(true);
             const mascaras = await templateService.getMascaras();
             const mc = mascaraId
-                ? (mascaras.find(m => m.id === mascaraId) ?? mascaras[0] ?? null)
-                : mascaras[0] ?? null;
+                ? (mascaras.find(m => m.id === mascaraId) ?? null)
+                : null;
             setMascara(mc);
             if (mc) {
                 const savedData = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);

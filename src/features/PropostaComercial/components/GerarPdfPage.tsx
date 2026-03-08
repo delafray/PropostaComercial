@@ -11,6 +11,7 @@ import { prefService } from '../services/prefService';
 import { supabase } from '../../../../services/supabaseClient';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
 import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
+import { parseBriefingPdf } from '../utils/briefingParser';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -592,46 +593,85 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             // Ordena as páginas da máscara
             const paginasConfig = [...(mascara.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
 
-            // ── Renders (busca local, ordenados pelo nome crescente) ─────────
-
-            let renderUrls: string[] = [];
-            if (proposta) {
-                const renderNames: string[] = proposta.dados?.renders ?? [];
-
-                if (renderNames.length > 0) {
-                    // Se a pasta não está carregada, tenta pedir acesso agora
-                    let arquivos = arquivosLocais;
-                    if (arquivos.length === 0 && pastaHandle) {
-                        setProgress('Aguardando acesso à pasta...');
-                        const granted = await pedirPermissao(pastaHandle);
-                        if (granted) {
-                            arquivos = await lerArquivos(pastaHandle);
-                            setArquivosLocais(arquivos);
-                        }
-                    }
-
-                    if (arquivos.length === 0) {
-                        throw new Error('Não foi possível acessar a pasta do projeto. Selecione a pasta novamente na aba Nova Proposta.');
-                    }
-
-                    // Ordena pelo nome crescente (10.jpg < 11.jpg < 12.jpg...)
-                    const sorted = [...renderNames].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-                    for (const renderName of sorted) {
-                        const localFile = arquivos.find(f => f.name === renderName);
-                        if (localFile) {
-                            renderUrls.push(URL.createObjectURL(localFile));
-                        } else {
-                            throw new Error(`Imagem "${renderName}" não encontrada na pasta local. Verifique se o arquivo existe na pasta selecionada.`);
-                        }
-                    }
+            // ── Arquivos locais (carregado uma vez para renders e memorial) ──────
+            let arquivos = arquivosLocais;
+            if (arquivos.length === 0 && pastaHandle) {
+                setProgress('Aguardando acesso à pasta...');
+                const granted = await pedirPermissao(pastaHandle);
+                if (granted) {
+                    arquivos = await lerArquivos(pastaHandle);
+                    setArquivosLocais(arquivos);
                 }
             }
+
+            // ── Renders (fonte de verdade: pasta local) ───────────────────────
+            // Pasta carregada → usa exatamente os arquivos que existem nela, sem consultar BD.
+            // Pasta não carregada → sem renders (slots ficam em branco, não há erro).
+
+            let renderUrls: string[] = [];
+            if (arquivos.length > 0) {
+                const renderNames = arquivos
+                    .filter(f => /^\d+\.(jpg|jpeg|png)$/i.test(f.name))
+                    .map(f => f.name);
+                const sorted = [...renderNames].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                for (const renderName of sorted) {
+                    const localFile = arquivos.find(f => f.name === renderName);
+                    if (localFile) renderUrls.push(URL.createObjectURL(localFile));
+                }
+            }
+
+            // ── Memorial local (fonte de verdade: arquivo .txt da pasta) ─────────
+            // Pasta disponível mas sem .txt → string vazia (não usa dado salvo no BD).
+            // Sem pasta → fallback para o memorial salvo no BD.
+            let localMemorial = '';
+            if (arquivos.length > 0) {
+                const txtFile = arquivos.find(f => /\.txt$/i.test(f.name));
+                if (txtFile) {
+                    try { localMemorial = await txtFile.text(); } catch { /* silent */ }
+                }
+            } else {
+                localMemorial = proposta?.dados?.memorial ?? '';
+            }
+
+            // ── Tamanho do estande local (fonte de verdade: arquivo na pasta) ────
+            // Mesma lógica: pasta disponível → extrai dos nomes dos arquivos locais.
+            // Sem pasta → extrai dos nomes salvos no BD.
+            let localTamanhoEstande = '';
+            const fonteNomesArquivos = arquivos.length > 0
+                ? arquivos.map(f => f.name)
+                : (proposta?.dados?.pasta?.arquivos ?? []);
+            for (const nome of fonteNomesArquivos) {
+                const m = nome.match(/(\d+)[,.](\d+)m/i);
+                if (m) { localTamanhoEstande = `${m[1]},${m[2]}m`; break; }
+            }
+
+            // ── Briefing local (fonte de verdade: arquivo PDF da pasta) ──────────
+            // Pasta disponível mas sem PDF de briefing → null → todos os campos vazios.
+            // NUNCA usar dado de outro cliente salvo no BD quando a pasta está carregada.
+            // Sem pasta → fallback para o briefing salvo no BD.
+            let localBriefing: import('../types').BriefingData | null = null;
+            if (arquivos.length > 0) {
+                const pdfBriefing = arquivos.find(f => /^\d{4,5}\.pdf$/i.test(f.name));
+                if (pdfBriefing) {
+                    try {
+                        setProgress('Lendo briefing...');
+                        localBriefing = await parseBriefingPdf(pdfBriefing);
+                    } catch { localBriefing = null; }
+                }
+                // sem PDF → localBriefing permanece null → campos em branco
+            } else {
+                localBriefing = proposta?.dados?.briefing ?? null;
+            }
+
+            // ── Valores manuais de slots (paginas) ───────────────────────────────
+            // Pasta carregada → ignora valores manuais do BD (podem ser de outro projeto).
+            // Sem pasta → usa os valores salvos no BD para geração standalone.
+            const localPaginas = arquivos.length > 0 ? null : (proposta?.dados?.paginas ?? null);
 
             // ── Auto-fill a partir do briefing ───────────────────────────────
 
             function buildBriefingMap(): Record<string, string> {
-                const b = proposta?.dados?.briefing;
+                const b = localBriefing;
 
                 // Gerar data atual (Mês e Ano) em PT-BR para a capa
                 const agora = new Date();
@@ -642,12 +682,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 const cliente = (b?.cliente ?? '').trim().toUpperCase();
                 const evento = (b?.evento ?? '').trim().toUpperCase();
 
-                // Extrai tamanhoEstande dos nomes de arquivo salvos na pasta
-                let tamanho = '';
-                for (const nome of (proposta?.dados?.pasta?.arquivos ?? [])) {
-                    const m = nome.match(/(\d+)[,.](\d+)m/i);
-                    if (m) { tamanho = `${m[1]},${m[2]}m`; break; }
-                }
+                const tamanho = localTamanhoEstande;
 
                 const data = b?.data ?? '';
                 const local = (b?.local ?? '').toUpperCase();
@@ -697,7 +732,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             function buildTextMap(pageConfig: PaginaConfig | null): Record<string, string> {
                 if (!pageConfig) return {};
                 const map: Record<string, string> = {};
-                const pg = proposta?.dados?.paginas?.find(p => p.pagina === pageConfig.pagina);
+                const pg = localPaginas?.find(p => p.pagina === pageConfig.pagina);
 
                 for (const slot of pageConfig.slots ?? []) {
                     const slotDef = slotDefaults[slot.id];
@@ -707,7 +742,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         if (slotDef?.scriptName === 'hoje') {
                             map[slot.nome] = new Date().toLocaleDateString('pt-BR');
                         } else if (slotDef?.scriptName === 'cliente_evento') {
-                            const b = proposta?.dados?.briefing;
+                            const b = localBriefing;
                             const cli = (b?.cliente ?? '').trim();
                             const eve = (b?.evento ?? '').trim();
                             map[slot.nome] = [cli, eve].filter(Boolean).join(' · ');
@@ -716,17 +751,17 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                             const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
                             map[slot.nome] = `${meses[agora.getMonth()]} | ${agora.getFullYear()}`;
                         } else if (slotDef?.scriptName === '01') {
-                            map[slot.nome] = proposta?.dados?.memorial ?? '';
+                            map[slot.nome] = localMemorial;
                         } else if (slotDef?.scriptName === 'altura_estande') {
-                            map[slot.nome] = proposta?.dados?.pasta?.tamanhoEstande ?? '';
+                            map[slot.nome] = localTamanhoEstande;
                         } else if (slotDef?.scriptName === 'projetista') {
                             map[slot.nome] = nomeProjetista;
                         } else if (slotDef?.scriptName === 'pv_texto') {
-                            const pvSec = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'impressão digital');
+                            const pvSec = extrairSecaoMemorial(localMemorial, 'impressão digital');
                             if (!pvSec) console.warn('[pv_texto] Seção "impressão digital" não encontrada no memorial.');
                             map[slot.nome] = pvSec;
                         } else if (slotDef?.scriptName === 'eletrica') {
-                            const elSec = extrairSecaoMemorial(proposta?.dados?.memorial ?? '', 'elétrica');
+                            const elSec = extrairSecaoMemorial(localMemorial, 'elétrica');
                             if (!elSec) console.warn('[eletrica] Seção "elétrica" não encontrada no memorial.');
                             map[slot.nome] = elSec;
                         }
@@ -739,7 +774,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
                     // Field mode → briefing[fieldKey] > manual (ignora value residual)
                     if (mode === 'field' && slotDef?.fieldKey) {
-                        const rawVal = (proposta?.dados?.briefing as any)?.[slotDef.fieldKey];
+                        const rawVal = (localBriefing as any)?.[slotDef.fieldKey];
                         const resolved = (rawVal ? String(rawVal).trim().toUpperCase() : '')
                             || (manual ? String(manual).trim() : '');
                         if (resolved) map[slot.nome] = resolved;
@@ -761,7 +796,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
             function buildFontSizeMap(pageConfig: PaginaConfig | null): Record<string, number> {
                 if (!pageConfig) return {};
-                const pg = proposta?.dados?.paginas?.find(p => p.pagina === pageConfig.pagina);
+                const pg = localPaginas?.find(p => p.pagina === pageConfig.pagina);
                 const map: Record<string, number> = {};
                 for (const slot of pageConfig.slots ?? []) {
                     const fromProposta = pg?.fontSizes?.[slot.id];
@@ -1328,7 +1363,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
             setProgress('Finalizando...');
             const blob = doc.output('blob');
-            const b = proposta?.dados?.briefing;
+            const b = localBriefing;
             const nomeCliente = (b?.cliente ?? '').trim();
             const nomeEvento  = (b?.evento ?? '').trim();
             const numero      = (b?.numero ?? '').trim();
@@ -1363,13 +1398,27 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
         return (
             <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
                 {!pdfBlob ? (
-                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[280px]">
-                        <svg className="animate-spin w-10 h-10 text-orange-500" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                        </svg>
-                        <p className="text-sm font-semibold text-gray-700">{progress || 'Gerando PDF...'}</p>
-                        {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[280px] max-w-sm">
+                        {error ? (
+                            <>
+                                <span className="text-3xl">⚠️</span>
+                                <p className="text-xs text-red-600 text-center font-medium leading-relaxed">{error}</p>
+                                <button
+                                    onClick={() => { setError(''); onComplete?.(); }}
+                                    className="mt-1 text-sm bg-gray-800 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                                >
+                                    Fechar
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <svg className="animate-spin w-10 h-10 text-orange-500" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                                <p className="text-sm font-semibold text-gray-700">{progress || 'Gerando PDF...'}</p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => { setPdfBlob(null); onComplete?.(); }} />

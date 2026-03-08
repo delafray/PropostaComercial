@@ -41,4 +41,18 @@ export const prefService = {
         if (error) throw new Error(error.message);
         return data?.valor ?? null;
     },
+
+    async deletePref(chave: string): Promise<void> {
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+        if (!user) return;
+
+        const { error } = await supabase
+            .from('pc_user_prefs')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('chave', chave);
+
+        if (error) throw new Error(error.message);
+    },
 };

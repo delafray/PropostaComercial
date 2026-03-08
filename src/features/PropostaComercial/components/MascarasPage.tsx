@@ -9,7 +9,7 @@ import { prefKeyForMascara, SlotDefaults } from './ConfiguracaoPage';
 import { parsePasta } from '../utils/projetoParser';
 import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 
-export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (fontSize: number) => void } = {}) {
+export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (fontSize: number, mascaraId: string) => void } = {}) {
     // Máscaras
     const [mascaras, setMascaras] = useState<TemplateMascara[]>([]);
     const [mascaraAtiva, setMascaraAtiva] = useState<TemplateMascara | null>(null);
@@ -32,27 +32,33 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     useEffect(() => { loadData(); }, []);
 
     async function loadData() {
+        setLoading(true);
+        const maquinaId = getMaquinaId();
+        let mc: TemplateMascara | null = null;
         try {
-            setLoading(true);
-            const maquinaId = getMaquinaId();
-            const [lista, mascaraAtivaId, pref, handle, propostas] = await Promise.all([
+            // Fase 1 — crítico: render imediato com lista de máscaras e máscara ativa
+            const [lista, mascaraAtivaId] = await Promise.all([
                 templateService.getMascaras(),
                 prefService.loadPref(`mascara_ativa_${maquinaId}`).catch(() => null),
-                prefService.loadPref(`pasta_ativa_${maquinaId}`).catch(() => null),
-                suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
-                propostaService.getPropostas().catch(() => []),
             ]);
-            setProposta((propostas as Proposta[])[0] ?? null);
             setMascaras(lista);
-            // Se nunca foi selecionada, inicia com null (força usuário a escolher)
-            const mc = mascaraAtivaId ? (lista.find((m: TemplateMascara) => m.id === mascaraAtivaId) ?? null) : null;
+            mc = mascaraAtivaId ? (lista.find((m: TemplateMascara) => m.id === mascaraAtivaId) ?? null) : null;
             setMascaraAtiva(mc);
-            if (mc) { await loadFontDescritivo(mc); }
+        } finally {
+            setLoading(false); // Render imediato — pasta/proposta carregam em background
+        }
+
+        // Fase 2 — secundário: não bloqueia o render
+        Promise.all([
+            prefService.loadPref(`pasta_ativa_${maquinaId}`).catch(() => null),
+            suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
+            propostaService.getPropostas().catch(() => []),
+            mc ? loadFontDescritivo(mc) : Promise.resolve(),
+        ]).then(([pref, handle, propostas]) => {
+            setProposta((propostas as Proposta[])[0] ?? null);
             if (pref) setUltimaPasta(pref as any);
             if (handle) setHandleSalvo(true);
-        } finally {
-            setLoading(false);
-        }
+        }).catch(() => {});
     }
 
     async function loadFontDescritivo(mc: TemplateMascara) {
@@ -112,6 +118,12 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         };
         await prefService.savePref(`pasta_ativa_${maquinaId}`, pref).catch(() => null);
         setUltimaPasta(pref);
+
+        // Atualiza proposta para a pasta selecionada (busca por nome)
+        propostaService.getPropostas().then((all: Proposta[]) => {
+            const match = all.find(p => p.dados?.pasta?.nome === nomePasta) ?? null;
+            setProposta(match);
+        }).catch(() => {});
     }
 
     async function handleSelecionarPasta() {
@@ -206,7 +218,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                                 </div>
                                 <button
                                     type="button"
-                                    onClick={() => onRenderizarPdf(sessionFont)}
+                                    onClick={() => onRenderizarPdf(sessionFont, mascaraAtiva!.id)}
                                     disabled={!projeto || !mascaraAtiva || loadingPasta}
                                     title={!projeto ? 'Selecione uma pasta primeiro' : !mascaraAtiva ? 'Selecione uma máscara primeiro' : `Máscara: ${mascaraAtiva.nome} · Fonte: ${sessionFont}pt`}
                                     className="flex items-center gap-2 bg-orange-500 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
