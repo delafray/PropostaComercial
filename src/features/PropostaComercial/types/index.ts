@@ -24,6 +24,7 @@ export interface PaginaConfig {
 export interface TemplateMascara {
     id: string;
     nome: string;
+    formato: 'A4' | '16:9';
     url_mascara_pdf: string;
     paginas_config: PaginaConfig[];
     created_at: string;

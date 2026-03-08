@@ -13,6 +13,7 @@ interface LayoutProps {
   headerActions?: ReactNode;
   mobileSidebarContent?: ReactNode;
   onMobileBack?: () => boolean; // return true = modal was closed, skip exit dialog
+  sidebarExtra?: ReactNode;
 }
 
 const NavItem = ({ to, label, icon: Icon }: { to: string; label: string; icon: any }) => (
@@ -30,7 +31,7 @@ const NavItem = ({ to, label, icon: Icon }: { to: string; label: string; icon: a
   </NavLink>
 );
 
-const Layout: React.FC<LayoutProps> = ({ children, title, headerActions, mobileSidebarContent, onMobileBack }) => {
+const Layout: React.FC<LayoutProps> = ({ children, title, headerActions, mobileSidebarContent, onMobileBack, sidebarExtra }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
@@ -232,6 +233,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, headerActions, mobileS
 
             <div className="pt-2 md:pt-4 pb-1 md:pb-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sistema</div>
             <NavItem to="/propostas" label="Propostas" icon={DocumentIcon} />
+            {sidebarExtra}
             {user?.canManageTags && <NavItem to="/usuarios" label="Usuários" icon={UsersIcon} />}
 
             {isBiometricsSupported && !user?.isVisitor && (

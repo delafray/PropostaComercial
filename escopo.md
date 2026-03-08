@@ -1,6 +1,59 @@
 # ESCOPO.md - Regras de Negócio e Mapeamento de PDF
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Fix: título e forceMascaraId contaminando outras abas**
+- `forceMascaraId` removido do GerarPdfPage regular — aba Gerar PDF usa seleção própria
+- Título "Editando Máscara: X" agora só aparece quando `view === 'templates'`
+- Nas demais abas e na MascarasPage o título volta a ser "Proposta Comercial"
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
+**Reorganização: Modal de Máscara em Nova Proposta**
+- Aba "Templates" removida do nav (acesso via modal/callback)
+- `NovaPropostaPage`: botão "Máscara ▾" abre modal com 3 steps (list / format / nome)
+  - Usuário comum: lista de máscaras para selecionar
+  - Admin: + botão "Editar" + "➕ Nova Máscara" → steps format → nome → "Criar e Configurar →"
+- `TemplateManager`: aceita `onBack` (botão "← Voltar") + `initialCreate` (pré-preenche form)
+- `index.tsx`: nav oculto em view='templates'; tabs = Nova + Gerar PDF + (admin) Configuração
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
+**Fase 5 — Ajuste de Fonte pelo Usuário Comum**
+- Input de fonte para slot `scriptName='01'` (descritivo): min=5, max=9, step=0.5, fallback default=7pt
+- Todos os outros slots mantêm min=6, max=72, step=1
+- Salvo por proposta (já era assim — `paginas[].fontSizes`)
+- Não precisou de migration nem de lógica nova — apenas ajuste dos atributos do `<input>`
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
+**Fase 4 — Roles Admin x Usuário Comum**
+- `index.tsx`: estado `isAdmin` carregado no mount via `supabase.auth.getUser()` + query `users.is_projetista | is_admin`
+- Tabs filtradas: `templates` e `config` só aparecem quando `isAdmin === true`
+- Render condicional reforçado: `{view === 'templates' && isAdmin && <TemplateManager />}`
+- Sem migration necessária — usa `is_projetista` (já existe) e `is_admin` (lido com fallback nulo)
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
+**Fase 3 — Dados da Pasta como memória RAM por usuário/máquina**
+- Chave de pasta trocada de `ultima_pasta` (global) para `pasta_ativa_{maquinaId}` (por máquina)
+- 3 pontos alterados em `NovaPropostaPage.tsx`: `loadData()`, `aplicarArquivos()`, `handleSalvarPasta()`
+- Resultado: dois computadores na mesma conta não sobrescrevem a pasta um do outro
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
+**Fase 2 — Seleção de Máscara em Nova Proposta**
+- `NovaPropostaPage`: estado `listaMascaras` para guardar todas as máscaras disponíveis
+- `loadData()`: carrega pref `mascara_ativa_{maquinaId}` para restaurar a última máscara usada por sessão
+- Proposta restaurada filtrada por `mascara_id` (não restaura proposta de outra máscara)
+- `handleSelecionarMascara(mc)`: troca a máscara ativa, salva pref, recarrega defaults, reconstrói pages
+- UI: seletor de máscaras visível apenas quando há mais de uma (não quebra quem tem só uma)
+- Badge de formato no cabeçalho da página
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
+**Fase 1 — Máscara com Formato (A4 / 16:9)**
+- `TemplateMascara` (types/index.ts): campo `formato: 'A4' | '16:9'` adicionado
+- Migration: `20260307_pc_mascara_formato.sql` — coluna `formato TEXT NOT NULL DEFAULT 'A4' CHECK (IN 'A4','16:9')`
+- `TemplateManager.tsx`: fluxo em 2 passos (escolher formato → nome + PDF), sem padrão pré-selecionado
+- Form agora sempre acessível via botão "➕ Nova Máscara" (múltiplas máscaras permitidas)
+- Badge de formato exibido no card de cada máscara
+- **Pendente:** aplicar migration `20260307_pc_mascara_formato.sql` no Supabase
+
+## ✅ ÚLTIMA TAREFA CONCLUÍDA (anterior)
 **Feature: Botão "➕ Expandir" — adicionar novos slots sem perder configurações existentes (TemplateManager.tsx)**
 - Botão roxo ao lado de "📐 Re-sync" no gerenciador de máscaras
 - Handler `handleAddSlots`: parse do novo PDF → compara contagem por página → appenda só os slots extras

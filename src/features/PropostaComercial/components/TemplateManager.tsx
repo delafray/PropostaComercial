@@ -164,7 +164,17 @@ function AddSlotForm({ onAdd, onCancel }: { onAdd: (slot: SlotElemento) => void;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function TemplateManager() {
+export default function TemplateManager({
+    autoOpenNew,
+    preNome,
+    preFormato,
+    mascaraIdParaEditar,
+}: {
+    autoOpenNew?: boolean;
+    preNome?: string;
+    preFormato?: 'A4' | '16:9';
+    mascaraIdParaEditar?: string | null;
+} = {}) {
     const [activeTab, setActiveTab] = useState<Tab>('mascara');
     const [mascaras, setMascaras] = useState<TemplateMascara[]>([]);
     const [backdrops, setBackdrops] = useState<TemplateBackdrop[]>([]);
@@ -180,10 +190,12 @@ export default function TemplateManager() {
     const bdFileRef = useRef<HTMLInputElement>(null);
 
     // Máscara form
-    const [mcNome, setMcNome] = useState('');
+    const [mcNome, setMcNome] = useState(preNome ?? '');
     const [mcFile, setMcFile] = useState<File | null>(null);
     const [mcPaginasDetectadas, setMcPaginasDetectadas] = useState(0);
     const mcFileRef = useRef<HTMLInputElement>(null);
+    const [mcFormato, setMcFormato] = useState<'A4' | '16:9' | null>(preFormato ?? null);
+    const [showMcForm, setShowMcForm] = useState(!!(autoOpenNew || preFormato));
 
     // Página editor (per mascara)
     const [expandedMascaraId, setExpandedMascaraId] = useState<string | null>(null);
@@ -208,6 +220,20 @@ export default function TemplateManager() {
     const [addingSlotsId, setAddingSlotsId] = useState<string | null>(null);
 
     useEffect(() => { loadAll(); }, []);
+
+    // Quando editar máscara específica: auto-expandir após carregar
+    useEffect(() => {
+        if (!mascaraIdParaEditar || loading) return;
+        const mc = mascaras.find((m: TemplateMascara) => m.id === mascaraIdParaEditar);
+        if (!mc) return;
+        setExpandedMascaraId(mascaraIdParaEditar);
+        setEditingPaginas(prev => ({
+            ...prev,
+            [mascaraIdParaEditar]: mc.paginas_config?.length
+                ? mc.paginas_config.map((p: PaginaConfig) => ({ ...p, slots: p.slots ?? [] }))
+                : [{ pagina: 1, descricao: '', slots: [] }],
+        }));
+    }, [mascaras, loading]);
 
     async function loadAll() {
         try {
@@ -290,8 +316,8 @@ export default function TemplateManager() {
                 descricao: '',
                 slots: [],
             }));
-            await templateService.createMascara({ nome: mcNome, url_mascara_pdf: url, paginas_config });
-            setMcNome(''); setMcFile(null); setMcPaginasDetectadas(0);
+            await templateService.createMascara({ nome: mcNome, url_mascara_pdf: url, paginas_config, formato: mcFormato! });
+            setMcNome(''); setMcFile(null); setMcPaginasDetectadas(0); setMcFormato(null); setShowMcForm(false);
             if (mcFileRef.current) mcFileRef.current.value = '';
             await loadAll();
         } catch (e: unknown) { setError((e as Error).message); }
@@ -620,9 +646,11 @@ export default function TemplateManager() {
         <div className="max-w-6xl mx-auto mt-2">
 
             {/* Page header */}
-            <div className="mb-5 pl-1">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">Templates da Proposta</h1>
-                <p className="text-sm text-gray-400 mt-0.5">3 pilares que estruturam a geração automática de propostas comerciais</p>
+            <div className="mb-5 pl-1 flex items-start justify-between gap-3">
+                <div>
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Templates da Proposta</h1>
+                    <p className="text-sm text-gray-400 mt-0.5">3 pilares que estruturam a geração automática de propostas comerciais</p>
+                </div>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
@@ -673,54 +701,102 @@ export default function TemplateManager() {
                                 </span>
                             </div>
 
-                            {/* Aviso quando já existe máscara */}
-                            {mascaras.length > 0 && (
-                                <p className="text-xs text-gray-400 italic mb-4">
-                                    Para substituir a máscara, exclua a atual abaixo e adicione uma nova.
-                                </p>
+                            {/* Botão Nova Máscara — oculto em modo edição isolada */}
+                            {!showMcForm && !mascaraIdParaEditar && (
+                                <button
+                                    onClick={() => setShowMcForm(true)}
+                                    className="mb-5 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded border border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100 transition-colors">
+                                    ➕ Nova Máscara
+                                </button>
+                            )}
+                            {/* Banner de modo edição isolada */}
+                            {mascaraIdParaEditar && (
+                                <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                                    <span>✏️</span>
+                                    <span className="font-semibold">Modo edição — apenas a máscara selecionada está visível.</span>
+                                </div>
                             )}
 
-                            {/* Form — oculto se já existe máscara */}
-                            <form onSubmit={handleCreateMascara}
-                                className={`grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 p-4 bg-gray-50 border border-gray-200 rounded mb-6 ${mascaras.length > 0 ? 'hidden' : ''}`}>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Nome da Máscara</label>
-                                    <input
-                                        type="text" required value={mcNome}
-                                        onChange={e => setMcNome(e.target.value)}
-                                        placeholder="Ex: Máscara Padrão 2026"
-                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">Arquivo PDF</label>
-                                    <input
-                                        type="file" required ref={mcFileRef} accept=".pdf"
-                                        onChange={async e => {
-                                            const file = e.target.files?.[0] ?? null;
-                                            setMcFile(file);
-                                            if (file) {
-                                                const n = await contarPaginasPdf(file);
-                                                setMcPaginasDetectadas(n);
-                                            } else {
-                                                setMcPaginasDetectadas(0);
-                                            }
-                                        }}
-                                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
-                                    />
-                                    {mcPaginasDetectadas > 0 && (
-                                        <p className="text-xs text-emerald-600 mt-1 font-medium">
-                                            ✓ {mcPaginasDetectadas} página{mcPaginasDetectadas > 1 ? 's' : ''} detectada{mcPaginasDetectadas > 1 ? 's' : ''}
-                                        </p>
+                            {/* Form de criação em 2 passos */}
+                            {showMcForm && (
+                                <div className="p-4 bg-gray-50 border border-gray-200 rounded mb-6">
+
+                                    {/* Passo 1: Escolher formato */}
+                                    {!mcFormato ? (
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wide">Qual o formato desta máscara?</p>
+                                            <div className="flex gap-3 mb-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMcFormato('A4')}
+                                                    className="flex-1 py-4 border-2 border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-all">
+                                                    A4<br /><span className="text-xs font-normal text-gray-400">210 × 297 mm</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMcFormato('16:9')}
+                                                    className="flex-1 py-4 border-2 border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-all">
+                                                    16:9<br /><span className="text-xs font-normal text-gray-400">Largura × Altura proporcional</span>
+                                                </button>
+                                            </div>
+                                            <button type="button" onClick={() => setShowMcForm(false)}
+                                                className="text-xs text-gray-400 hover:text-gray-600">
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* Passo 2: Nome + PDF */
+                                        <form onSubmit={handleCreateMascara}
+                                            className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    Nome da Máscara
+                                                    <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">{mcFormato}</span>
+                                                </label>
+                                                <input
+                                                    type="text" required value={mcNome}
+                                                    onChange={e => setMcNome(e.target.value)}
+                                                    placeholder="Ex: Máscara Padrão 2026"
+                                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">Arquivo PDF</label>
+                                                <input
+                                                    type="file" required ref={mcFileRef} accept=".pdf"
+                                                    onChange={async e => {
+                                                        const file = e.target.files?.[0] ?? null;
+                                                        setMcFile(file);
+                                                        if (file) {
+                                                            const n = await contarPaginasPdf(file);
+                                                            setMcPaginasDetectadas(n);
+                                                        } else {
+                                                            setMcPaginasDetectadas(0);
+                                                        }
+                                                    }}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
+                                                />
+                                                {mcPaginasDetectadas > 0 && (
+                                                    <p className="text-xs text-emerald-600 mt-1 font-medium">
+                                                        ✓ {mcPaginasDetectadas} página{mcPaginasDetectadas > 1 ? 's' : ''} detectada{mcPaginasDetectadas > 1 ? 's' : ''}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex items-end gap-2">
+                                                <button type="submit" disabled={uploading}
+                                                    className="whitespace-nowrap bg-orange-600 text-white py-2 px-5 rounded text-sm font-semibold hover:bg-orange-700 disabled:opacity-50 transition-colors">
+                                                    {uploading ? 'Salvando...' : '+ Adicionar'}
+                                                </button>
+                                                <button type="button"
+                                                    onClick={() => { setShowMcForm(false); setMcFormato(null); setMcNome(''); setMcFile(null); setMcPaginasDetectadas(0); }}
+                                                    className="text-xs text-gray-400 hover:text-gray-600 py-2">
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </form>
                                     )}
                                 </div>
-                                <div className="flex items-end">
-                                    <button type="submit" disabled={uploading}
-                                        className="whitespace-nowrap bg-orange-600 text-white py-2 px-5 rounded text-sm font-semibold hover:bg-orange-700 disabled:opacity-50 transition-colors">
-                                        {uploading ? 'Salvando...' : '+ Adicionar'}
-                                    </button>
-                                </div>
-                            </form>
+                            )}
 
                             {/* List */}
                             {loading ? (
@@ -730,7 +806,7 @@ export default function TemplateManager() {
                                     sub="Adicione o PDF de referência da diagramação" />
                             ) : (
                                 <div className="space-y-2">
-                                    {mascaras.map((mc: TemplateMascara) => {
+                                    {(mascaraIdParaEditar ? mascaras.filter((m: TemplateMascara) => m.id === mascaraIdParaEditar) : mascaras).map((mc: TemplateMascara) => {
                                         const linkedCount = backdrops.filter((b: TemplateBackdrop) => b.mascara_id === mc.id).length;
                                         const isExpanded = expandedMascaraId === mc.id;
                                         const paginas = editingPaginas[mc.id] ?? mc.paginas_config ?? [];
@@ -748,7 +824,12 @@ export default function TemplateManager() {
                                                         <span className="text-xs font-bold text-red-600">PDF</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-sm text-gray-800">{mc.nome}</p>
+                                                        <p className="font-semibold text-sm text-gray-800">
+                                                            {mc.nome}
+                                                            {mc.formato && (
+                                                                <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">{mc.formato}</span>
+                                                            )}
+                                                        </p>
                                                         <p className="text-xs text-gray-400 mt-0.5">
                                                             {totalPaginas > 0 ? `${totalPaginas} página(s)` : 'Páginas não detectadas'}
                                                             {linkedCount > 0 ? ` · ${linkedCount} fundo(s) vinculado(s)` : ''}

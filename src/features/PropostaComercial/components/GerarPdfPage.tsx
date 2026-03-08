@@ -490,7 +490,7 @@ async function drawPlantaAnnotations(
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void } = {}) {
+export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, forceMascaraId, sessionFontSize }: { onGoToNova?: () => void; autoGenerate?: boolean; onComplete?: () => void; forceMascaraId?: string | null; sessionFontSize?: number } = {}) {
     const [mascara, setMascara] = useState<TemplateMascara | null>(null);
     const [backdrops, setBackdrops] = useState<TemplateBackdrop[]>([]);
     const [proposta, setProposta] = useState<Proposta | null>(null);
@@ -508,6 +508,8 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
     const [referenciasOCV, setReferenciasOCV] = useState<TemplateReferencia[]>([]);
 
     useEffect(() => { loadData(); }, []);
+    // Quando autoGenerate=true, dispara gerarPdf assim que o loading terminar
+    useEffect(() => { if (autoGenerate && !loading && !generating && !pdfBlob) { gerarPdf(); } }, [loading]);
 
     async function loadData() {
         try {
@@ -519,8 +521,9 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                 templateService.getReferencias().catch(() => []),
             ]);
             setReferenciasOCV(refs as TemplateReferencia[]);
-            // Sempre usa o 1º de cada lista
-            const mc = mascaras[0] ?? null;
+            const mc = forceMascaraId
+                ? (mascaras.find(m => m.id === forceMascaraId) ?? mascaras[0] ?? null)
+                : mascaras[0] ?? null;
             setMascara(mc);
             setBackdrops(bd);
             setProposta(propostas[0] ?? null);
@@ -764,9 +767,13 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
                     const fromProposta = pg?.fontSizes?.[slot.id];
                     const fromConfig = slotDefaults[slot.id]?.fontSize;
 
+                    // Override session: fonte temporária passada diretamente (sem persistir)
+                    if (sessionFontSize !== undefined && slotDefaults[slot.id]?.scriptName === '01') {
+                        map[slot.id] = sessionFontSize;
+                        continue;
+                    }
+
                     if (fromProposta !== undefined) {
-                        // Heurística de limpeza: se o valor salvo for exatamente o fallback padrão original do template
-                        // e houver uma configuração global ativa, assumimos que o valor salvo foi um auto-save indesejado.
                         const fallbackSize = slot.font_size ?? 12;
                         if (fromProposta === fallbackSize && fromConfig !== undefined) {
                             map[slot.id] = fromConfig;
@@ -1351,6 +1358,26 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
         return <div className="text-sm text-gray-400 py-10 text-center">Carregando...</div>;
     }
 
+    // Modo auto-generate: overlay fixo sobre a página, sem navegar para cá
+    if (autoGenerate) {
+        return (
+            <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
+                {!pdfBlob ? (
+                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[280px]">
+                        <svg className="animate-spin w-10 h-10 text-orange-500" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <p className="text-sm font-semibold text-gray-700">{progress || 'Gerando PDF...'}</p>
+                        {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+                    </div>
+                ) : (
+                    <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => { setPdfBlob(null); onComplete?.(); }} />
+                )}
+            </div>
+        );
+    }
+
     if (!mascara) {
         return (
             <div className="max-w-4xl mx-auto">
@@ -1553,7 +1580,7 @@ export default function GerarPdfPage({ onGoToNova }: { onGoToNova?: () => void }
             </div>
 
             {pdfBlob && (
-                <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => setPdfBlob(null)} />
+                <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => { setPdfBlob(null); onComplete?.(); }} />
             )}
         </div>
     );

@@ -16,8 +16,14 @@ import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } = {}) {
+export default function NovaPropostaPage({ onSaved, isAdmin, onAbrirTemplates, onCriarMascara }: {
+    onSaved?: () => void;
+    isAdmin?: boolean;
+    onAbrirTemplates?: () => void;
+    onCriarMascara?: (formato: 'A4' | '16:9', nome: string) => void;
+} = {}) {
     const [mascara, setMascara] = useState<TemplateMascara | null>(null);
+    const [listaMascaras, setListaMascaras] = useState<TemplateMascara[]>([]);
     const [backdrops, setBackdrops] = useState<TemplateBackdrop[]>([]);
     const [loading, setLoading] = useState(true);
     const [slotDefaults, setSlotDefaults] = useState<SlotDefaults>({});
@@ -49,19 +55,28 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
     const [ultimaPasta, setUltimaPasta] = useState<{ nome: string; arquivos: string[]; savedAt: string } | null>(null);
     const [handleSalvo, setHandleSalvo] = useState(false);
 
+    // Modal de máscara
+    const [showMascaraModal, setShowMascaraModal] = useState(false);
+    const [novaMcStep, setNovaMcStep] = useState<'list' | 'format' | 'nome'>('list');
+    const [novaMcFormato, setNovaMcFormato] = useState<'A4' | '16:9' | null>(null);
+    const [novaMcNome, setNovaMcNome] = useState('');
+
     useEffect(() => { loadData(); }, []);
 
     async function loadData() {
         try {
             setLoading(true);
-            const [mascaras, bd, propostas, pref, handle] = await Promise.all([
+            const maquinaId = getMaquinaId();
+            const [mascarasList, bd, propostas, pref, handle, mascaraAtivaPref] = await Promise.all([
                 templateService.getMascaras(),
                 templateService.getBackdrops(),
                 propostaService.getPropostas(),
-                prefService.loadPref('ultima_pasta').catch(() => null),
+                prefService.loadPref(`pasta_ativa_${maquinaId}`).catch(() => null),
                 suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
+                prefService.loadPref(`mascara_ativa_${maquinaId}`).catch(() => null),
             ]);
-            const mc = mascaras[0] ?? null;
+            setListaMascaras(mascarasList);
+            const mc = (mascaraAtivaPref ? mascarasList.find((m: TemplateMascara) => m.id === mascaraAtivaPref) : null) ?? mascarasList[0] ?? null;
             setMascara(mc);
             setBackdrops(bd);
             if (mc) {
@@ -69,7 +84,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                 const defs = (savedDefs as SlotDefaults) ?? {};
                 setSlotDefaults(defs);
 
-                const prop = propostas[0] ?? null;
+                const prop = propostas.find((p: any) => p.mascara_id === mc.id) ?? null;
                 if (prop) {
                     // Restaura estado salvo da proposta
                     setNomeProposta(prop.nome ?? '');
@@ -298,7 +313,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
             arquivos: files.map(f => f.name),
             savedAt: new Date().toISOString(),
         };
-        prefService.savePref('ultima_pasta', pref).catch(() => null);
+        prefService.savePref(`pasta_ativa_${getMaquinaId()}`, pref).catch(() => null);
 
         // Salva imediatamente no banco (aguardado — garante que o briefing esteja
         // disponível antes do spinner fechar e o usuário trocar de aba).
@@ -374,7 +389,7 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                 ],
                 savedAt: new Date().toISOString(),
             };
-            await prefService.savePref('ultima_pasta', pref).catch(() => null);
+            await prefService.savePref(`pasta_ativa_${getMaquinaId()}`, pref).catch(() => null);
             setUltimaPasta(pref);
         } catch { }
     }
@@ -466,6 +481,20 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
         setMemorialTexto(null);
     }
 
+    async function handleSelecionarMascara(mc: TemplateMascara) {
+        if (mc.id === mascara?.id) return;
+        setMascara(mc);
+        const maquinaId = getMaquinaId();
+        prefService.savePref(`mascara_ativa_${maquinaId}`, mc.id).catch(() => null);
+        const savedDefs = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
+        const defs = (savedDefs as SlotDefaults) ?? {};
+        setSlotDefaults(defs);
+        setPages(buildPagesFromMascara(mc, defs, briefingData));
+        setNomeProposta('');
+        setSavedId(null);
+        setError('');
+    }
+
     // ── Render ─────────────────────────────────────────────────────────────────
 
     if (loading) {
@@ -533,12 +562,138 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                 </div>
             )}
 
-            <div className="mb-5 pl-1">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">Nova Proposta</h1>
-                <p className="text-sm text-gray-400 mt-0.5">
-                    Máscara: <strong className="text-gray-600">{mascara.nome}</strong>
-                </p>
+            <div className="mb-5 pl-1 flex items-start justify-between gap-3">
+                <div>
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Nova Proposta</h1>
+                    <p className="text-sm text-gray-400 mt-0.5">Máscara ativa</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => { setNovaMcStep('list'); setShowMascaraModal(true); }}
+                    className="flex items-center gap-2 shrink-0 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:border-orange-400 hover:text-orange-700 transition-all"
+                >
+                    {mascara.nome}
+                    {mascara.formato && <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-orange-100 text-orange-700">{mascara.formato}</span>}
+                    <span className="text-gray-400 text-xs">▾</span>
+                </button>
             </div>
+
+            {/* ── Modal de Máscara ─────────────────────────────────────────── */}
+            {showMascaraModal && (
+                <div
+                    className="fixed inset-0 z-[9998] bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => { setShowMascaraModal(false); setNovaMcStep('list'); setNovaMcFormato(null); setNovaMcNome(''); }}
+                >
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                        {/* Header modal */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+                            <h2 className="text-base font-bold text-gray-800">
+                                {novaMcStep === 'list' ? 'Máscara' : novaMcStep === 'format' ? 'Nova Máscara — Formato' : 'Nova Máscara — Nome'}
+                            </h2>
+                            <button
+                                onClick={() => { setShowMascaraModal(false); setNovaMcStep('list'); setNovaMcFormato(null); setNovaMcNome(''); }}
+                                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                            >✕</button>
+                        </div>
+
+                        {/* Step: lista */}
+                        {novaMcStep === 'list' && (
+                            <div className="p-4">
+                                <div className="space-y-2 mb-4">
+                                    {listaMascaras.map((mc: TemplateMascara) => (
+                                        <div key={mc.id} className={`flex items-center justify-between p-3 rounded-lg border ${mascara?.id === mc.id ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                                            <button
+                                                type="button"
+                                                onClick={() => { handleSelecionarMascara(mc); setShowMascaraModal(false); }}
+                                                className="flex-1 flex items-center gap-2 text-left min-w-0"
+                                            >
+                                                <span className={`text-sm font-semibold truncate ${mascara?.id === mc.id ? 'text-orange-700' : 'text-gray-700'}`}>{mc.nome}</span>
+                                                {mc.formato && <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-orange-100 text-orange-700 shrink-0">{mc.formato}</span>}
+                                                {mascara?.id === mc.id && <span className="text-[10px] text-orange-500 font-bold shrink-0">✓ Ativa</span>}
+                                            </button>
+                                            {isAdmin && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowMascaraModal(false); onAbrirTemplates?.(); }}
+                                                    className="ml-3 shrink-0 text-xs text-blue-600 font-semibold px-2 py-1 rounded border border-blue-200 hover:bg-blue-50 transition-colors"
+                                                >Editar</button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                {isAdmin && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setNovaMcStep('format')}
+                                        className="w-full py-2.5 border-2 border-dashed border-orange-300 text-orange-700 text-sm font-semibold rounded-lg hover:bg-orange-50 transition-colors"
+                                    >➕ Nova Máscara</button>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Step: format */}
+                        {novaMcStep === 'format' && (
+                            <div className="p-4">
+                                <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wide">Qual o formato desta máscara?</p>
+                                <div className="flex gap-3 mb-4">
+                                    <button type="button"
+                                        onClick={() => { setNovaMcFormato('A4'); setNovaMcStep('nome'); }}
+                                        className="flex-1 py-4 border-2 border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-all">
+                                        A4<br /><span className="text-xs font-normal text-gray-400">210 × 297 mm</span>
+                                    </button>
+                                    <button type="button"
+                                        onClick={() => { setNovaMcFormato('16:9'); setNovaMcStep('nome'); }}
+                                        className="flex-1 py-4 border-2 border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:text-orange-700 transition-all">
+                                        16:9<br /><span className="text-xs font-normal text-gray-400">Largura × Altura proporcional</span>
+                                    </button>
+                                </div>
+                                <button type="button" onClick={() => setNovaMcStep('list')}
+                                    className="text-xs text-gray-400 hover:text-gray-600">← Voltar</button>
+                            </div>
+                        )}
+
+                        {/* Step: nome */}
+                        {novaMcStep === 'nome' && (
+                            <div className="p-4">
+                                <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wide">
+                                    Nome da máscara
+                                    <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700">{novaMcFormato}</span>
+                                </p>
+                                <input
+                                    type="text"
+                                    value={novaMcNome}
+                                    onChange={e => setNovaMcNome(e.target.value)}
+                                    placeholder="Ex: Mascara Principal"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400 mb-4"
+                                    autoFocus
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && novaMcNome.trim()) {
+                                            setShowMascaraModal(false); setNovaMcStep('list');
+                                            onCriarMascara?.(novaMcFormato!, novaMcNome.trim());
+                                            setNovaMcFormato(null); setNovaMcNome('');
+                                        }
+                                    }}
+                                />
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setNovaMcStep('format')}
+                                        className="text-xs text-gray-400 hover:text-gray-600 py-2 px-3">← Voltar</button>
+                                    <button
+                                        type="button"
+                                        disabled={!novaMcNome.trim()}
+                                        onClick={() => {
+                                            if (!novaMcNome.trim() || !novaMcFormato) return;
+                                            setShowMascaraModal(false); setNovaMcStep('list');
+                                            onCriarMascara?.(novaMcFormato, novaMcNome.trim());
+                                            setNovaMcFormato(null); setNovaMcNome('');
+                                        }}
+                                        className="flex-1 bg-orange-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-orange-700 disabled:opacity-40 transition-colors"
+                                    >Criar e Configurar →</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <div className="mb-5 flex items-start justify-between gap-3 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">
@@ -790,19 +945,23 @@ export default function NovaPropostaPage({ onSaved }: { onSaved?: () => void } =
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {showFontSize && (
-                                                        <div className="flex items-center gap-1 shrink-0">
-                                                            <input
-                                                                type="number"
-                                                                min={6}
-                                                                max={72}
-                                                                value={pd.fontSizes?.[slot.id] ?? slot.font_size ?? 12}
-                                                                onChange={e => setFontSize(pi, slot.id, Number(e.target.value))}
-                                                                className="w-12 border border-gray-300 rounded px-1 py-1.5 text-xs text-center focus:outline-none focus:border-orange-400"
-                                                            />
-                                                            <span className="text-[10px] text-gray-400">pt</span>
-                                                        </div>
-                                                    )}
+                                                    {showFontSize && (() => {
+                                                        const isDescritivo = isScriptMode && slotDef?.scriptName === '01';
+                                                        return (
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                <input
+                                                                    type="number"
+                                                                    min={isDescritivo ? 5 : 6}
+                                                                    max={isDescritivo ? 9 : 72}
+                                                                    step={isDescritivo ? 0.5 : 1}
+                                                                    value={pd.fontSizes?.[slot.id] ?? slot.font_size ?? (isDescritivo ? 7 : 12)}
+                                                                    onChange={e => setFontSize(pi, slot.id, Number(e.target.value))}
+                                                                    className="w-14 border border-gray-300 rounded px-1 py-1.5 text-xs text-center focus:outline-none focus:border-orange-400"
+                                                                />
+                                                                <span className="text-[10px] text-gray-400">pt</span>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                     {isScriptMode ? (
                                                         <div className="flex-1 flex items-center gap-2">
                                                             <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-2 py-1 rounded border border-blue-200 shrink-0">

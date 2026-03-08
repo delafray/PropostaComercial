@@ -127,7 +127,7 @@ export const SCRIPT_OPTIONS = [
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 
-export default function ConfiguracaoPage() {
+export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | null } = {}) {
     const [mascara, setMascara] = useState<TemplateMascara | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -141,7 +141,9 @@ export default function ConfiguracaoPage() {
         try {
             setLoading(true);
             const mascaras = await templateService.getMascaras();
-            const mc = mascaras[0] ?? null;
+            const mc = mascaraId
+                ? (mascaras.find(m => m.id === mascaraId) ?? mascaras[0] ?? null)
+                : mascaras[0] ?? null;
             setMascara(mc);
             if (mc) {
                 const savedData = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
