@@ -59,6 +59,17 @@ Este documento é a referência oficial de todos os scripts usados nos slots. Pa
 
 ---
 
+## SCRIPT: `foto_planta` (Planta Baixa — Simples)
+
+- **Objetivo:** Insere a planta baixa no slot em uma única página, sem distorção, sem análise OpenCV.
+- **Fonte dos dados:** Arquivo `planta.jpg`, `planta.png` ou `planta.svg` da pasta local do projeto.
+- **Comportamento:** A imagem é inserida usando contain (sem distorção), ocupando o máximo possível das dimensões do slot.
+- **Formatos suportados:** JPG/PNG (raster) e SVG (vetorial via dupla camada: raster + svg2pdf).
+- **Diferença do `planta`:** Não gera página de análise OpenCV — apenas a imagem original em 1 página.
+- **Modo:** Sem controles de estilo (ocultados quando ativo).
+
+---
+
 ## SCRIPT: `planta` (Planta Baixa + Análise OpenCV)
 
 - **Objetivo:** Insere a planta baixa do projeto e gera uma segunda página com análise automática de símbolos.

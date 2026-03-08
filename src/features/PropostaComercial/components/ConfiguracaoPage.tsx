@@ -49,35 +49,50 @@ const ALIGN_OPTS = [
 
 // Campos diretos do briefing disponíveis para mapeamento
 export const FIELD_OPTIONS = [
-    { key: 'cliente', label: 'Cliente' },
-    { key: 'evento', label: 'Evento' },
-    { key: 'local', label: 'Local' },
-    { key: 'data', label: 'Data' },
-    { key: 'numero', label: 'Número do Projeto' },
-    { key: 'numeroStand', label: 'Número do Stand' },
-    { key: 'areaStand', label: 'Área do Stand' },
     { key: 'formaConstrutiva', label: 'Altura / Forma' },
+    { key: 'areaStand', label: 'Área do Stand' },
+    { key: 'cliente', label: 'Cliente' },
     { key: 'comercial', label: 'Comercial' },
     { key: 'contato', label: 'Contato' },
+    { key: 'data', label: 'Data' },
     { key: 'email', label: 'E-mail' },
+    { key: 'evento', label: 'Evento' },
+    { key: 'local', label: 'Local' },
+    { key: 'numero', label: 'Número do Projeto' },
+    { key: 'numeroStand', label: 'Número do Stand' },
 ];
 
 // Scripts disponíveis (comportamentos nomeados)
 export const SCRIPT_OPTIONS = [
     {
-        name: 'projeto',
-        label: 'Projeto (Renders)',
-        description: 'Insere as imagens de render do projeto neste slot. Ordena pelo nome (menor número primeiro) e gera uma página por render.',
-    },
-    {
-        name: 'hoje',
-        label: 'Data de Hoje',
-        description: 'Insere a data atual formatada (DD/MM/AAAA) neste slot.',
+        name: 'altura_estande',
+        label: 'Altura do Estande (Busca do texto dentro da imagem)',
+        description: 'Insere a altura do estande extraída do nome do arquivo na pasta do projeto (ex: altura_3,50m.png → "3,50m").',
     },
     {
         name: 'cliente_evento',
-        label: 'Cliente · Evento',
+        label: 'Cliente e Evento (União Automática dos dois itens)',
         description: 'Insere os dados combinados: {Cliente} · {Evento}.',
+    },
+    {
+        name: 'hoje',
+        label: 'Data de Hoje (Busca automática da data de hoje)',
+        description: 'Insere a data atual formatada (DD/MM/AAAA) neste slot.',
+    },
+    {
+        name: '01',
+        label: 'Descritivo da Proposta',
+        description: 'Renderiza o memorial descritivo tabular com categorias em negrito.',
+    },
+    {
+        name: 'eletrica',
+        label: 'Texto Elétrica (Busca Automática do Bloco)',
+        description: 'Extrai do memorial a seção "Elétrica" e renderiza em texto compacto com título em negrito. Fonte auto-ajustável para caber no slot.',
+    },
+    {
+        name: 'imagem_estande',
+        label: 'Cota (CROP Automático da Planta Baixa)',
+        description: 'Insere o PNG de altura do estande (arquivo com padrão ex: altura_3,50m.png) cropado verticalmente + desenha cota arquitetural com o valor da altura. Só funciona com PNG.',
     },
     {
         name: 'mes_ano',
@@ -85,24 +100,24 @@ export const SCRIPT_OPTIONS = [
         description: 'Insere o mês e o ano atual (padrão: MÊS | ANO).',
     },
     {
-        name: '01',
-        label: 'Script 01 (Descritivo)',
-        description: 'Renderiza o memorial descritivo tabular com categorias em negrito.',
+        name: 'pv_texto',
+        label: 'Texto Programação Visual (Busca Automática do Bloco)',
+        description: 'Extrai do memorial a seção "Impressão Digital" (itens abaixo do título até o próximo) e renderiza em texto compacto. Fonte auto-ajustável para caber no slot.',
+    },
+    {
+        name: 'foto_planta',
+        label: 'Planta Baixa',
+        description: 'Insere a planta baixa do projeto (planta.jpg/png/svg da pasta) em uma única página, sem distorção, ocupando o máximo do slot. Sem análise OpenCV.',
     },
     {
         name: 'planta',
-        label: 'Planta Baixa',
+        label: 'Planta Baixa - Eletrica (cinza)',
         description: 'Insere a planta baixa do projeto (planta.jpg/png/svg da pasta). Gera 2 páginas: original + versão cinza claro com marcações automáticas das iscas OpenCV.',
     },
     {
-        name: 'altura_estande',
-        label: 'Altura do Estande',
-        description: 'Insere a altura do estande extraída do nome do arquivo na pasta do projeto (ex: altura_3,50m.png → "3,50m").',
-    },
-    {
-        name: 'imagem_estande',
-        label: 'Imagem do Estande (com Cota)',
-        description: 'Insere o PNG de altura do estande (arquivo com padrão ex: altura_3,50m.png) cropado verticalmente + desenha cota arquitetural com o valor da altura. Só funciona com PNG.',
+        name: 'programacao_visual',
+        label: 'Programação Visual (IMAGEM - Autocompletar dos Slots)',
+        description: 'Insere renders do projeto neste slot e em outros slots vazios de tamanho similar na mesma página. Ordena pelo nome do arquivo (menor número primeiro).',
     },
     {
         name: 'projetista',
@@ -110,19 +125,9 @@ export const SCRIPT_OPTIONS = [
         description: 'Insere o nome do projetista responsável cadastrado no perfil do usuário logado.',
     },
     {
-        name: 'programacao_visual',
-        label: 'Programação Visual',
-        description: 'Insere renders do projeto neste slot e em outros slots vazios de tamanho similar na mesma página. Ordena pelo nome do arquivo (menor número primeiro).',
-    },
-    {
-        name: 'pv_texto',
-        label: 'P.V. Texto',
-        description: 'Extrai do memorial a seção "Impressão Digital" (itens abaixo do título até o próximo) e renderiza em texto compacto. Fonte auto-ajustável para caber no slot.',
-    },
-    {
-        name: 'eletrica',
-        label: 'Elétrica Texto',
-        description: 'Extrai do memorial a seção "Elétrica" e renderiza em texto compacto com título em negrito. Fonte auto-ajustável para caber no slot.',
+        name: 'projeto',
+        label: 'Render dos Projetos (IMAGEM Auto inclusão de novas Paginas)',
+        description: 'Insere as imagens de render do projeto neste slot. Ordena pelo nome (menor número primeiro) e gera uma página por render.',
     },
 ];
 
@@ -282,7 +287,7 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
                                     // Scripts que aceitam estilo tipográfico (não são imagem)
                                     const TEXT_SCRIPTS = new Set(['hoje', 'cliente_evento', 'mes_ano', '01', 'altura_estande', 'projetista', 'pv_texto', 'eletrica']);
                                     const showScriptStyle = mode === 'script' && TEXT_SCRIPTS.has(def.scriptName ?? '');
-                                    // Script 01 tem ciclo de cores próprio — omite bold/italic/align no painel
+                                    // Descritivo da Proposta tem ciclo de cores próprio — omite bold/italic/align no painel
                                     const scriptHasFullStyle = showScriptStyle && def.scriptName !== '01';
 
                                     return (
@@ -332,7 +337,7 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
                                                         onChange={e => update(slot.id, { fieldKey: e.target.value })}
                                                         className="w-full border border-orange-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-orange-400 bg-orange-50 text-orange-900"
                                                     >
-                                                        {FIELD_OPTIONS.map(f => (
+                                                        {[...FIELD_OPTIONS].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')).map(f => (
                                                             <option key={f.key} value={f.key}>{f.label}</option>
                                                         ))}
                                                     </select>
@@ -349,7 +354,7 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
                                                         onChange={e => update(slot.id, { scriptName: e.target.value })}
                                                         className="w-full border border-blue-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-blue-50 text-blue-900 font-semibold mb-1.5"
                                                     >
-                                                        {SCRIPT_OPTIONS.map(s => (
+                                                        {[...SCRIPT_OPTIONS].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')).map(s => (
                                                             <option key={s.name} value={s.name}>{s.label}</option>
                                                         ))}
                                                     </select>

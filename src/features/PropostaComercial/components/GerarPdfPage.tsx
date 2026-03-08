@@ -198,11 +198,11 @@ async function renderImagemEstande(
     const leftContentX_mm = imgRegion.x + (leftCol / W) * imgRegion.w;
 
     const COTA_OFFSET_MM = 4;   // distância da cota à borda visível da imagem (mm)
-    const TICK_LEFT_MM   = 1.5; // comprimento do traço à esquerda da linha (mm)
-    const TICK_RIGHT_MM  = 5;   // comprimento do traço à direita da linha, em direção à imagem (mm)
+    const TICK_LEFT_MM = 1.5; // comprimento do traço à esquerda da linha (mm)
+    const TICK_RIGHT_MM = 5;   // comprimento do traço à direita da linha, em direção à imagem (mm)
 
-    const cotaX      = leftContentX_mm - COTA_OFFSET_MM;
-    const cotaTop    = imgRegion.y;
+    const cotaX = leftContentX_mm - COTA_OFFSET_MM;
+    const cotaTop = imgRegion.y;
     const cotaBottom = imgRegion.y + imgRegion.h;
 
     doc.setDrawColor(0, 174, 239);
@@ -828,7 +828,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             }
 
 
-            // ── Função auxiliar Script 01 (Descritivo Tabulado) ───────────────
+            // ── Função auxiliar Descritivo da Proposta (Tabulado) ───────────────
 
             async function renderDescritivo01(doc: jsPDF, lines: string[], slot: SlotElemento, fontSizeMap: Record<string, number> = {}): Promise<string[]> {
                 const configColor = slotDefaults[slot.id]?.color;
@@ -842,17 +842,17 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     : [Math.round(r * 0.55), Math.round(g * 0.55), Math.round(b * 0.55)];
                 const accentPalette: Array<[number, number, number]> = luminance < 128
                     ? [ // texto escuro → acentos ricos/densos
-                        [29,  78, 216],  // blue-700
-                        [21, 128,  61],  // green-700
-                        [185, 28,  28],  // red-700
-                        [180, 83,   9],  // amber-700
+                        [29, 78, 216],  // blue-700
+                        [21, 128, 61],  // green-700
+                        [185, 28, 28],  // red-700
+                        [180, 83, 9],  // amber-700
                         [15, 118, 110],  // teal-700
                     ]
                     : [ // texto claro → acentos suaves/pastel
                         [147, 197, 253], // blue-300
                         [134, 239, 172], // green-300
                         [252, 165, 165], // red-300
-                        [252, 211,  77], // amber-300
+                        [252, 211, 77], // amber-300
                         [103, 232, 249], // cyan-300
                     ];
                 let categoryIndex = 0;
@@ -887,8 +887,8 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 }
 
                 const gap9pt = 9 * (25.4 / 72);
-                const COL_QTD  = X_START + (maxW0 > 0 ? maxW0 + gap9pt : 0); // 9pt após ID
-                const COL_UNID = COL_QTD  + (maxW1 > 0 ? maxW1 + gap6pt : 0);
+                const COL_QTD = X_START + (maxW0 > 0 ? maxW0 + gap9pt : 0); // 9pt após ID
+                const COL_UNID = COL_QTD + (maxW1 > 0 ? maxW1 + gap6pt : 0);
                 const COL_DESC = COL_UNID + (maxW2 > 0 ? maxW2 + gap6pt : 0);
                 const maxDescW = slot.x_mm + slot.w_mm - COL_DESC - 1;
 
@@ -916,7 +916,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
                         const lineY = currentY + lineHeight;
                         if (parts[0]) await drawCol(parts[0], X_START, lineY, 'normal', defaultSize - 1, idColor);
-                        if (parts[1]) await drawCol(parts[1], COL_QTD,  lineY, 'normal', defaultSize - 1);
+                        if (parts[1]) await drawCol(parts[1], COL_QTD, lineY, 'normal', defaultSize - 1);
                         if (parts[2]) await drawCol(parts[2], COL_UNID, lineY, 'normal', defaultSize - 1);
 
                         const descText = parts.slice(3).join('   ');
@@ -1188,6 +1188,12 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     return def?.mode === 'script' && def?.scriptName === 'imagem_estande';
                 });
 
+                // Detecta o slot configurado com o script 'foto_planta'
+                const fotoPlantaSlot = (cfgPagina.slots ?? []).find(s => {
+                    const def = slotDefaults[s.id];
+                    return def?.mode === 'script' && def?.scriptName === 'foto_planta';
+                });
+
                 // Detecta o slot configurado com o script 'programacao_visual'
                 const pvSlot = (cfgPagina.slots ?? []).find(s => {
                     const def = slotDefaults[s.id];
@@ -1218,9 +1224,9 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     });
                 }
 
-                // Todos os outros slots (exceto projeto, planta, imagem_estande e programacao_visual)
+                // Todos os outros slots (exceto projeto, planta, foto_planta, imagem_estande e programacao_visual)
                 const otherSlots = (cfgPagina.slots ?? []).filter(s =>
-                    s !== projetoSlot && s !== plantaSlot && s !== imagemEstandeSlot && !pvClaimedIds.has(s.id)
+                    s !== projetoSlot && s !== plantaSlot && s !== fotoPlantaSlot && s !== imagemEstandeSlot && !pvClaimedIds.has(s.id)
                 );
 
                 // Repete 1× por render (projeto), 2× (planta: original + anotada se há refs OCV), ou 1× normal
@@ -1348,6 +1354,45 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                             }
                         }
 
+                        // Script foto_planta: insere planta no slot sem distorção (uma única página, sem OpenCV)
+                        if (fotoPlantaSlot) {
+                            const plantaFile = arquivosLocais.find(f => /^planta\.(jpg|jpeg|png|svg)$/i.test(f.name)) ?? null;
+                            if (plantaFile) {
+                                try {
+                                    const isSvg = /\.svg$/i.test(plantaFile.name);
+                                    const dims = await getImageNaturalSize(plantaFile).catch(() => ({ w: fotoPlantaSlot.w_mm, h: fotoPlantaSlot.h_mm }));
+                                    if (isSvg) {
+                                        const svgText = await plantaFile.text();
+                                        const parserTmp = new DOMParser();
+                                        const svgElTmp = parserTmp.parseFromString(svgText, 'image/svg+xml').documentElement;
+                                        const vb = svgElTmp.getAttribute('viewBox');
+                                        let svgRegion = containInSlot(fotoPlantaSlot, dims.w, dims.h);
+                                        if (vb) {
+                                            const parts = vb.split(/[\s,]+/).map(parseFloat);
+                                            if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
+                                                svgRegion = containInSlot(fotoPlantaSlot, parts[2], parts[3]);
+                                            }
+                                        }
+                                        const jpgRaster = await rasterizarSvg(svgText, svgRegion.w, svgRegion.h);
+                                        doc.addImage(jpgRaster, 'JPEG', svgRegion.x, svgRegion.y, svgRegion.w, svgRegion.h, undefined, 'FAST');
+                                        const svgVetorial = preprocessarSvg(normalizarImagensSvg(inlinearCssSvg(svgSemImageElements(svgText))));
+                                        const svgEl = parserTmp.parseFromString(svgVetorial, 'image/svg+xml').documentElement;
+                                        try {
+                                            await svg2pdf(svgEl, doc, { x: svgRegion.x, y: svgRegion.y, width: svgRegion.w, height: svgRegion.h });
+                                        } catch {
+                                            // svg2pdf falhou — raster já cobre
+                                        }
+                                    } else {
+                                        const region = containInSlot(fotoPlantaSlot, dims.w, dims.h);
+                                        const { data, format } = await fileToBase64(plantaFile);
+                                        doc.addImage(data, format, region.x, region.y, region.w, region.h, undefined, 'FAST');
+                                    }
+                                } catch (e) {
+                                    // arquivo de planta não disponível ou falhou — slot fica vazio
+                                }
+                            }
+                        }
+
                         // Insere imagens do script programacao_visual
                         for (const [slotId, url] of pvMap.entries()) {
                             const pvS = (cfgPagina.slots ?? []).find(s => s.id === slotId);
@@ -1370,8 +1415,8 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             const blob = doc.output('blob');
             const b = localBriefing;
             const nomeCliente = (b?.cliente ?? '').trim();
-            const nomeEvento  = (b?.evento ?? '').trim();
-            const numero      = (b?.numero ?? '').trim();
+            const nomeEvento = (b?.evento ?? '').trim();
+            const numero = (b?.numero ?? '').trim();
             const partes = [nomeCliente, nomeEvento, numero].filter(Boolean);
             const nome = partes.length > 0
                 ? `${partes.join(' - ')}.pdf`
@@ -1570,23 +1615,29 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                             const def = slotDefaults[s.id];
                             return def?.mode === 'script' && def?.scriptName === 'planta';
                         });
+                        const hasFotoPlanta = p.slots?.some(s => {
+                            const def = slotDefaults[s.id];
+                            return def?.mode === 'script' && def?.scriptName === 'foto_planta';
+                        });
                         const n = hasProjeto ? (renderCount || 1) : hasPlanta ? 2 : 1;
 
                         return (
-                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasProjeto ? 'border-blue-100 bg-blue-50/40' : hasPlanta ? 'border-green-100 bg-green-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
-                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasProjeto ? 'bg-blue-100 text-blue-600' : hasPlanta ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                            <div key={i} className={`flex items-center gap-3 p-3 border rounded-lg ${hasProjeto ? 'border-blue-100 bg-blue-50/40' : hasPlanta ? 'border-green-100 bg-green-50/40' : hasFotoPlanta ? 'border-teal-100 bg-teal-50/40' : 'border-gray-100 bg-gray-50/50'}`}>
+                                <span className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${hasProjeto ? 'bg-blue-100 text-blue-600' : hasPlanta ? 'bg-green-100 text-green-600' : hasFotoPlanta ? 'bg-teal-100 text-teal-600' : 'bg-orange-100 text-orange-600'}`}>
                                     {p.pagina}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-700">
                                         {p.descricao || `Página ${p.pagina}`}
                                         {hasProjeto && n > 1 && <span className="ml-1.5 text-xs font-normal text-blue-600">(×{n} renders)</span>}
-                                        {hasPlanta && <span className="ml-1.5 text-xs font-normal text-green-600">(original + análise)</span>}
+                                        {hasPlanta && <span className="ml-1.5 text-xs font-normal text-green-600">(original + elétrica cinza)</span>}
+                                        {hasFotoPlanta && <span className="ml-1.5 text-xs font-normal text-teal-600">(foto planta)</span>}
                                     </p>
                                     <p className="text-[11px] text-gray-400">
                                         {p.slots?.filter(s => s.tipo === 'texto').length ?? 0} slot(s) texto
                                         {hasProjeto && ' + projeto'}
                                         {hasPlanta && ' + planta'}
+                                        {hasFotoPlanta && ' + foto planta'}
                                     </p>
                                 </div>
                                 <span className={`text-[11px] px-2 py-0.5 rounded font-semibold shrink-0 ${bd ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
