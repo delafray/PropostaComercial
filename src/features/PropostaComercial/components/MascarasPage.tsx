@@ -29,6 +29,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     const [pastaName, setPastaName] = useState('');
     const [loadingPasta, setLoadingPasta] = useState(false);
     const [briefingInfo, setBriefingInfo] = useState<{ cliente: string; evento: string; numero: string } | null>(null);
+    const [emailWarning, setEmailWarning] = useState(false);
     const [ultimaPasta, setUltimaPasta] = useState<{ nome: string; arquivos: string[]; savedAt: string } | null>(null);
     const [handleSalvo, setHandleSalvo] = useState(false);
     const [error, setError] = useState('');

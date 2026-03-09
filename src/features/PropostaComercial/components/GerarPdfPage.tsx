@@ -660,7 +660,13 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             // ── Briefing local ────────────────────────────────────────────────────
             let localBriefing: import('../types').BriefingData | null = null;
             if (arquivos.length > 0) {
-                const pdfBriefing = arquivos.find(f => /^\d{4,5}\.pdf$/i.test(f.name));
+                // Aceita 9182.pdf e 9182 (2).pdf — escolhe o de maior número de cópia
+                const briefingCandidatos = arquivos.filter(f => /^\d{4,5}(\s*\(\d+\))?\.pdf$/i.test(f.name));
+                briefingCandidatos.sort((a, b) => {
+                    const n = (name: string) => { const m = name.match(/\((\d+)\)\.pdf$/i); return m ? parseInt(m[1], 10) : 0; };
+                    return n(b.name) - n(a.name);
+                });
+                const pdfBriefing = briefingCandidatos[0] ?? null;
                 if (pdfBriefing) {
                     try {
                         setProgress('Lendo briefing...');
@@ -1415,15 +1421,17 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             setProgress('Finalizando...');
             const blob = doc.output('blob');
             const b = localBriefing;
-            const nomeCliente = (b?.cliente ?? '').trim();
-            const nomeEvento = (b?.evento ?? '').trim();
-            const numero = (b?.numero ?? '').trim();
+            // Remove acentos para evitar encoding corrompido no WhatsApp/Android
+            const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const nomeCliente = semAcento((b?.cliente ?? '').trim());
+            const nomeEvento  = semAcento((b?.evento ?? '').trim());
+            const numero      = (b?.numero ?? '').trim();
             const partes = [nomeCliente, nomeEvento, numero].filter(Boolean);
             const nome = partes.length > 0
                 ? `${partes.join(' - ')}.pdf`
                 : proposta
-                    ? `${proposta.nome.replace(/\s+/g, '_')}.pdf`
-                    : `Proposta_${mascara.nome.replace(/\s+/g, '_')}.pdf`;
+                    ? `${semAcento(proposta.nome).replace(/\s+/g, '_')}.pdf`
+                    : `Proposta_${semAcento(mascara.nome).replace(/\s+/g, '_')}.pdf`;
             setPdfBlob(blob);
             setPdfName(nome);
             setProgress('');
