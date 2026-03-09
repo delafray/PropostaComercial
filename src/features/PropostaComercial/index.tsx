@@ -415,7 +415,7 @@ export default function PropostaComercial() {
   }
 
   // Sessão de edição ativa — renderiza interface completa
-  const pageTitle = `Editando Máscara: ${mascaraNomeParaEditar}`;
+  const pageTitle = `Editando: ID.${mascaraIdParaEditar?.slice(0, 4)} - Máscara: ${mascaraNomeParaEditar}`;
 
   return (
     <Layout title={pageTitle}>
@@ -423,38 +423,38 @@ export default function PropostaComercial() {
 
         {/* Navegação do módulo - Sticky */}
         <div className="sticky top-[64px] sm:top-[72px] z-[105] bg-slate-50/95 backdrop-blur-sm -mx-2 px-2 pt-2 flex items-end justify-between border-b border-gray-200 mb-6">
-            <div className="flex">
-              {tabs.map(item => (
-                <button
-                  key={item.key}
-                  onClick={() => setView(item.key)}
-                  className={`px-5 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${view === item.key
-                      ? 'border-orange-500 text-orange-600 bg-white'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                    }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Indicador de sessão ativa + botão encerrar */}
-            <div className="flex items-center gap-2 pb-2 pr-1">
-              <span className="text-xs text-orange-600 font-medium truncate max-w-[180px]">
-                ✏️ {mascaraNomeParaEditar}
-              </span>
+          <div className="flex">
+            {tabs.map(item => (
               <button
-                onClick={() => {
-                  if (dirtyPlaces.size > 0) setShowExitConfirm(true);
-                  else sairDeTemplates();
-                }}
-                title="Encerrar sessão de edição"
-                className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-200 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
+                key={item.key}
+                onClick={() => setView(item.key)}
+                className={`px-5 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${view === item.key
+                  ? 'border-orange-500 text-orange-600 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  }`}
               >
-                ✕ Encerrar
+                {item.label}
               </button>
-            </div>
+            ))}
           </div>
+
+          {/* Indicador de sessão ativa + botão encerrar */}
+          <div className="flex items-center gap-2 pb-2 pr-1">
+            <span className="text-xs text-orange-600 font-medium truncate max-w-[250px]">
+              ✏️ ID.{mascaraIdParaEditar?.slice(0, 4)} - {mascaraNomeParaEditar}
+            </span>
+            <button
+              onClick={() => {
+                if (dirtyPlaces.size > 0) setShowExitConfirm(true);
+                else sairDeTemplates();
+              }}
+              title="Encerrar sessão de edição"
+              className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-200 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
+            >
+              ✕ Encerrar
+            </button>
+          </div>
+        </div>
 
         {/* Abas ficam montadas após 1ª visita (display:none preserva estado) */}
         {visitedViews.has('nova') && (
