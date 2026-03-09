@@ -11,6 +11,18 @@ Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Isolar MascarasPage + URL persistence + remover botão Excluir perigoso**
+- Criado `MascarasModule.tsx` — wrapper leve: Layout("Mascaras") + MascarasPage + overlay GerarPdfPage
+- Rota `/mascaras` adicionada no App.tsx
+- Item "Máscaras" no sidebar (Layout.tsx) — visível para todos
+- "Propostas" no sidebar: admin/projetista = botão colapsável; não-admin = NavLink
+- Sub-items admin navegam para `/propostas?modal=X`
+- URL params `mascara`, `nome`, `view`, `tab` persistem estado de edição (sobrevive F5)
+- TemplateManager: props `initialTab` e `onTabChange`
+- Removido botão "Excluir" perigoso da sub-aba Máscara PDF no TemplateManager
+- Redirect guard: `/propostas` sem contexto → `/mascaras`
+
+## ✅ TAREFA ANTERIOR
 **Sistema Multi-Módulo: gestão completa de módulos (Nova / Editar / Excluir)**
 
 ### Fluxo "Nova Máscara" (reescrito)

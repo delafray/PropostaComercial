@@ -171,14 +171,23 @@ export default function TemplateManager({
     preFormato,
     mascaraIdParaEditar,
     onMascaraCriada,
+    initialTab,
+    onTabChange,
 }: {
     autoOpenNew?: boolean;
     preNome?: string;
     preFormato?: 'A4' | '16:9';
     mascaraIdParaEditar?: string | null;
     onMascaraCriada?: (id: string, nome: string) => void;
+    initialTab?: Tab;
+    onTabChange?: (tab: Tab) => void;
 } = {}) {
-    const [activeTab, setActiveTab] = useState<Tab>('mascara');
+    const [activeTab, setActiveTabRaw] = useState<Tab>(initialTab ?? 'mascara');
+
+    function setActiveTab(tab: Tab) {
+        setActiveTabRaw(tab);
+        onTabChange?.(tab);
+    }
     const [mascaras, setMascaras] = useState<TemplateMascara[]>([]);
     const [backdrops, setBackdrops] = useState<TemplateBackdrop[]>([]);
     const [referencias, setReferencias] = useState<TemplateReferencia[]>([]);
@@ -959,10 +968,6 @@ export default function TemplateManager({
                                                             <input type="file" accept="application/pdf" className="hidden" disabled={uploading}
                                                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) handleAlterarPdfMascara(mc.id, mc.url_mascara_pdf, f); e.target.value = ''; }} />
                                                         </label>
-                                                        <button onClick={() => handleDeleteMascara(mc.id, mc.url_mascara_pdf)}
-                                                            className="text-[11px] text-red-400 hover:text-red-600 font-medium">
-                                                            Excluir
-                                                        </button>
                                                     </div>
                                                 </div>
 
