@@ -173,6 +173,7 @@ export default function TemplateManager({
     onMascaraCriada,
     initialTab,
     onTabChange,
+    onDirtyChange,
 }: {
     autoOpenNew?: boolean;
     preNome?: string;
@@ -181,6 +182,7 @@ export default function TemplateManager({
     onMascaraCriada?: (id: string, nome: string) => void;
     initialTab?: Tab;
     onTabChange?: (tab: Tab) => void;
+    onDirtyChange?: (label: string, dirty: boolean) => void;
 } = {}) {
     const [activeTab, setActiveTabRaw] = useState<Tab>(initialTab ?? 'mascara');
 
@@ -233,6 +235,25 @@ export default function TemplateManager({
     const [resyncingId, setResyncingId] = useState<string | null>(null);
     const [addingSlotsId, setAddingSlotsId] = useState<string | null>(null);
 
+    // ── Dirty tracking (alterações locais não salvas) ──
+    const paginasDirtyRef = useRef(false);
+    function markPaginasDirty() {
+        if (!paginasDirtyRef.current) {
+            paginasDirtyRef.current = true;
+            onDirtyChange?.('Templates (Máscara PDF)', true);
+        }
+    }
+    function clearPaginasDirty() {
+        if (paginasDirtyRef.current) {
+            paginasDirtyRef.current = false;
+            onDirtyChange?.('Templates (Máscara PDF)', false);
+        }
+    }
+    function editPaginasUser(updater: Parameters<typeof setEditingPaginas>[0]) {
+        setEditingPaginas(updater);
+        markPaginasDirty();
+    }
+
     useEffect(() => { loadAll(); }, []);
 
     // Quando editar máscara específica: auto-expandir após carregar
@@ -280,7 +301,7 @@ export default function TemplateManager({
     // ── Slot handlers ──────────────────────────────────────────────────────────
 
     function commitAddSlot(mascaraId: string, paginaIdx: number, slot: SlotElemento) {
-        setEditingPaginas(prev => ({
+        editPaginasUser(prev => ({
             ...prev,
             [mascaraId]: prev[mascaraId].map((p: PaginaConfig, i: number) =>
                 i === paginaIdx ? { ...p, slots: [...(p.slots ?? []), slot] } : p
@@ -290,7 +311,7 @@ export default function TemplateManager({
     }
 
     function deleteSlot(mascaraId: string, paginaIdx: number, slotIdx: number) {
-        setEditingPaginas(prev => ({
+        editPaginasUser(prev => ({
             ...prev,
             [mascaraId]: prev[mascaraId].map((p: PaginaConfig, i: number) =>
                 i === paginaIdx ? { ...p, slots: (p.slots ?? []).filter((_: SlotElemento, si: number) => si !== slotIdx) } : p
@@ -358,6 +379,7 @@ export default function TemplateManager({
             setMascaras((prev: TemplateMascara[]) => prev.map((m: TemplateMascara) =>
                 m.id === mascaraId ? { ...m, paginas_config: paginas } : m
             ));
+            clearPaginasDirty();
         } catch (e: unknown) { setError((e as Error).message); }
         finally { setSavingPaginas(null); }
     }
@@ -382,7 +404,7 @@ export default function TemplateManager({
     }
 
     function handlePaginaChange(mascaraId: string, paginaIndex: number, descricao: string) {
-        setEditingPaginas((prev: Record<string, PaginaConfig[]>) => ({
+        editPaginasUser((prev: Record<string, PaginaConfig[]>) => ({
             ...prev,
             [mascaraId]: prev[mascaraId].map((p: PaginaConfig, i: number) =>
                 i === paginaIndex ? { ...p, descricao } : p
@@ -1048,7 +1070,7 @@ export default function TemplateManager({
                                                                                         value={editingPaginas[mc.id]?.[idx]?.backdrop_id ?? ''}
                                                                                         onChange={e => {
                                                                                             const val = e.target.value || null;
-                                                                                            setEditingPaginas(prev => ({
+                                                                                            editPaginasUser(prev => ({
                                                                                                 ...prev,
                                                                                                 [mc.id]: prev[mc.id].map((pg: PaginaConfig, i: number) =>
                                                                                                     i === idx ? { ...pg, backdrop_id: val } : pg

@@ -285,6 +285,19 @@ export default function PropostaComercial() {
   // Templates — Excluir Máscara modal
   const [showExcluirModal, setShowExcluirModal] = useState(false);
 
+  // ── Dirty tracking (alterações não salvas) ──
+  const [dirtyPlaces, setDirtyPlaces] = useState<Set<string>>(new Set());
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  function handleDirtyChange(label: string, dirty: boolean) {
+    setDirtyPlaces(prev => {
+      const next = new Set(prev);
+      if (dirty) next.add(label);
+      else next.delete(label);
+      return next;
+    });
+  }
+
   // ── Sync estado → URL ──
   function syncUrl(params: { mascara?: string | null; nome?: string | null; view?: string | null; tab?: string | null }) {
     setSearchParams(prev => {
@@ -431,7 +444,10 @@ export default function PropostaComercial() {
                 ✏️ {mascaraNomeParaEditar}
               </span>
               <button
-                onClick={sairDeTemplates}
+                onClick={() => {
+                  if (dirtyPlaces.size > 0) setShowExitConfirm(true);
+                  else sairDeTemplates();
+                }}
                 title="Encerrar sessão de edição"
                 className="text-xs text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-200 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
               >
@@ -461,16 +477,52 @@ export default function PropostaComercial() {
               }}
               initialTab={urlTab ?? undefined}
               onTabChange={(tab) => syncUrl({ tab })}
+              onDirtyChange={handleDirtyChange}
             />
           </div>
         )}
         {visitedViews.has('config') && isAdmin && (
           <div style={{ display: view === 'config' ? undefined : 'none' }}>
-            <ConfiguracaoPage mascaraId={mascaraIdParaEditar} />
+            <ConfiguracaoPage mascaraId={mascaraIdParaEditar} onDirtyChange={handleDirtyChange} />
           </div>
         )}
 
       </div>
+
+      {/* ── Modal: Alterações não salvas ── */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+            <h2 className="text-lg font-bold text-amber-700 mb-2">Alterações não salvas</h2>
+            <p className="text-sm text-gray-600 mb-1">
+              Você modificou <strong className="text-orange-600">{mascaraNomeParaEditar}</strong> em:
+            </p>
+            <ul className="list-disc list-inside text-sm text-gray-800 mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+              {[...dirtyPlaces].map(label => (
+                <li key={label} className="font-medium">{label}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-500 mb-5">
+              Se sair agora, essas alterações serão perdidas.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 bg-orange-500 text-white text-sm font-semibold py-2.5 rounded-lg hover:bg-orange-600 transition-colors"
+              >
+                Voltar e Salvar
+              </button>
+              <button
+                onClick={() => { setShowExitConfirm(false); setDirtyPlaces(new Set()); sairDeTemplates(); }}
+                className="flex-1 border border-gray-200 text-gray-600 text-sm font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Sair sem Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Layout>
   );
 }

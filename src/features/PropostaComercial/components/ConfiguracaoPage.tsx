@@ -133,13 +133,14 @@ export const SCRIPT_OPTIONS = [
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 
-export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | null } = {}) {
+export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascaraId?: string | null; onDirtyChange?: (label: string, dirty: boolean) => void } = {}) {
     const [mascara, setMascara] = useState<TemplateMascara | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState('');
     const [defaults, setDefaults] = useState<SlotDefaults>({});
+    const touchedRef = React.useRef(false);
 
     useEffect(() => { loadData(); }, [mascaraId]);
 
@@ -183,6 +184,10 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
 
     function update(slotId: string, patch: Partial<SlotDefault>) {
         setSaved(false);
+        if (!touchedRef.current) {
+            touchedRef.current = true;
+            onDirtyChange?.('Configuração', true);
+        }
         setDefaults(prev => ({ ...prev, [slotId]: { ...prev[slotId], ...patch } }));
     }
 
@@ -193,6 +198,8 @@ export default function ConfiguracaoPage({ mascaraId }: { mascaraId?: string | n
         try {
             await prefService.savePref(prefKeyForMascara(mascara.id), defaults);
             setSaved(true);
+            touchedRef.current = false;
+            onDirtyChange?.('Configuração', false);
         } catch (e: any) {
             setError(e.message);
         } finally {
