@@ -278,6 +278,67 @@ export async function renderTextoVetor(
     return true;
 }
 
+/**
+ * Renderiza uma linha de texto com justificação total (justify).
+ * Distribui o espaço restante igualmente entre as palavras.
+ * Usar apenas em linhas que NÃO são a última de um parágrafo.
+ * Para última linha ou texto de palavra única, usa renderização left-aligned.
+ */
+export async function renderTextoVetorJustify(
+    doc: any,
+    text: string,
+    x_mm: number,
+    y_mm: number,
+    maxWidth_mm: number,
+    family: string,
+    style: string,
+    size_pt: number,
+    color: [number, number, number],
+): Promise<boolean> {
+    if (!text?.trim()) return true;
+
+    const font = await carregarOpentypeFont(family, style);
+    if (!font) return false;
+
+    const sizeMm = size_pt * (25.4 / 72);
+    const words = text.trim().split(/\s+/);
+
+    // Palavra única: sem justificação possível — renderiza normal
+    if (words.length <= 1) {
+        return renderTextoVetor(doc, text, x_mm, y_mm, family, style, size_pt, color);
+    }
+
+    const wordWidths = words.map(w => font.getAdvanceWidth(w, sizeMm));
+    const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0);
+    const gapWidth = (maxWidth_mm - totalWordsWidth) / (words.length - 1);
+
+    const sf: number = (doc as any).internal.scaleFactor;
+    const pageH: number = (doc as any).internal.pageSize.getHeight();
+    const [r, g, b] = color;
+
+    const allOps: string[] = [];
+    let currentX = x_mm;
+    for (let i = 0; i < words.length; i++) {
+        const path = font.getPath(words[i], currentX, y_mm, sizeMm);
+        if (path.commands.length) {
+            allOps.push(...pathParaOpsPdf(path.commands as any[], sf, pageH));
+        }
+        currentX += wordWidths[i] + gapWidth;
+    }
+
+    if (!allOps.length) return true;
+
+    (doc as any).internal.write([
+        'q',
+        `${(r / 255).toFixed(4)} ${(g / 255).toFixed(4)} ${(b / 255).toFixed(4)} rg`,
+        ...allOps,
+        'f',
+        'Q',
+    ].join('\n'));
+
+    return true;
+}
+
 // ── SVG preprocessing ──────────────────────────────────────────────────────────
 
 /**

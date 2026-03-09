@@ -11,7 +11,7 @@ import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../util
 import { prefService } from '../services/prefService';
 import { supabase } from '../../../../services/supabaseClient';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
-import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
+import { registrarFontes, normalizarFamilia, renderTextoVetor, renderTextoVetorJustify, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
 import { parseBriefingPdf } from '../utils/briefingParser';
 import { getMaquinaId } from '../utils/maquinaId';
 
@@ -593,6 +593,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
         setPdfBlob(null);
         setProgress('Iniciando...');
 
+        let renderUrls: string[] = [];
         try {
             const W = 297, H = 210;
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -618,7 +619,6 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             // Pasta carregada → usa exatamente os arquivos que existem nela, sem consultar BD.
             // Pasta não carregada → sem renders (slots ficam em branco, não há erro).
 
-            let renderUrls: string[] = [];
             if (arquivos.length > 0) {
                 const renderNames = arquivos
                     .filter(f => /^\d+\.(jpg|jpeg|png)$/i.test(f.name))
@@ -936,7 +936,13 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                                 const descY = lineY + dl * (lineHeight + lineSpacing);
                                 // dl === 0: sempre renderiza junto com ID/QTD/UNID (já desenhados sem checagem)
                                 if (dl > 0 && descY > maxY - lineHeight) break;
-                                await drawCol(descLines[dl], COL_DESC, descY, 'normal', defaultSize - 1);
+                                const isLastDescLine = dl === descLines.length - 1;
+                                if (!isLastDescLine && fontVetor && maxDescW > 0 && descLines[dl].trim().split(/\s+/).length > 1) {
+                                    const ok = await renderTextoVetorJustify(doc, descLines[dl], COL_DESC, descY, maxDescW, configFontFamily, 'normal', defaultSize - 1, [r, g, b]);
+                                    if (!ok) await drawCol(descLines[dl], COL_DESC, descY, 'normal', defaultSize - 1);
+                                } else {
+                                    await drawCol(descLines[dl], COL_DESC, descY, 'normal', defaultSize - 1);
+                                }
                             }
                             // Avança pelo número de linhas da descrição
                             currentY += (descLines.length - 1) * (lineHeight + lineSpacing);
@@ -1065,7 +1071,13 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         for (let dl = 0; dl < descWrapped.length; dl++) {
                             const wlineY = lineY + dl * (lineH + lineSpacing);
                             if (wlineY > slot.y_mm + slot.h_mm) break;
-                            await renderCampo(descWrapped[dl], descX, wlineY);
+                            const isLastDescLine = dl === descWrapped.length - 1;
+                            if (!isLastDescLine && fontVetor && descMaxW > 0 && descWrapped[dl].trim().split(/\s+/).length > 1) {
+                                const ok = await renderTextoVetorJustify(doc, descWrapped[dl], descX, wlineY, descMaxW, configFontFamily, 'normal', finalSize, [r, g, b]);
+                                if (!ok) await renderCampo(descWrapped[dl], descX, wlineY);
+                            } else {
+                                await renderCampo(descWrapped[dl], descX, wlineY);
+                            }
                         }
                         // Avança Y pelo número real de linhas da descrição
                         y += Math.max(1, descWrapped.length) * (lineH + lineSpacing);
