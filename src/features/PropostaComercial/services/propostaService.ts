@@ -9,11 +9,20 @@ export const propostaService = {
 
     // ── Leitura ────────────────────────────────────────────────────────────────
 
-    async getPropostas(): Promise<Proposta[]> {
-        const { data, error } = await supabase
+    /**
+     * Busca propostas filtradas por maquina_id.
+     * Inclui propostas antigas sem maquina_id (NULL) para não perder dados
+     * do período pré-migration — serão "adotadas" no próximo save.
+     */
+    async getPropostas(maquinaId?: string): Promise<Proposta[]> {
+        let query = supabase
             .from('pc_propostas')
             .select('*, mascara:pc_templates_mascara(id, nome)')
             .order('created_at', { ascending: false });
+        if (maquinaId) {
+            query = query.or(`maquina_id.eq.${maquinaId},maquina_id.is.null`);
+        }
+        const { data, error } = await query;
         if (error) throw new Error(error.message);
         return (data ?? []) as Proposta[];
     },
@@ -33,6 +42,7 @@ export const propostaService = {
     async createProposta(payload: {
         nome: string;
         mascara_id: string | null;
+        maquina_id: string | null;
         dados: object;
     }): Promise<Proposta> {
         const { data, error } = await supabase
@@ -45,22 +55,30 @@ export const propostaService = {
     },
 
     /**
-     * Salva a proposta única do sistema.
-     * Passe `existingId` sempre que o ID já for conhecido (evita race condition
-     * de leitura duplicada). Se `existingId` não for fornecido, busca a mais recente.
+     * Salva a proposta deste PC/máscara.
+     * Busca por maquina_id + mascara_id (não mais "a mais recente global").
+     * Se existingId é passado, atualiza direto (sem select).
      */
     async upsertProposta(payload: {
         nome: string;
         mascara_id: string | null;
+        maquina_id: string | null;
         dados: object;
     }, existingId?: string): Promise<Proposta> {
-        // Se o ID já é conhecido, atualiza diretamente sem precisar fazer select
         const idParaAtualizar = existingId ?? await (async () => {
-            const { data: existentes } = await supabase
+            let query = supabase
                 .from('pc_propostas')
                 .select('id')
                 .order('created_at', { ascending: false })
                 .limit(1);
+            // Filtra por maquina_id + mascara_id para isolamento correto
+            if (payload.maquina_id) {
+                query = query.or(`maquina_id.eq.${payload.maquina_id},maquina_id.is.null`);
+            }
+            if (payload.mascara_id) {
+                query = query.eq('mascara_id', payload.mascara_id);
+            }
+            const { data: existentes } = await query;
             return existentes?.[0]?.id as string | undefined;
         })();
 
@@ -70,6 +88,7 @@ export const propostaService = {
                 .update({
                     nome: payload.nome,
                     mascara_id: payload.mascara_id,
+                    maquina_id: payload.maquina_id,
                     dados: payload.dados,
                     updated_at: new Date().toISOString(),
                 })
@@ -104,7 +123,7 @@ export const propostaService = {
 
     async uploadImagemSlot(file: File): Promise<string> {
         const ext = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const fileName = `${crypto.randomUUID()}.${ext}`;
         const filePath = `propostas/${fileName}`;
         const { error } = await supabase.storage.from(BUCKET).upload(filePath, file);
         if (error) throw new Error(`Erro no upload: ${error.message}`);

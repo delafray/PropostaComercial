@@ -14,7 +14,7 @@ export const templateService = {
 
     async uploadFile(file: File, folder: string): Promise<string> {
         const ext = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const fileName = `${crypto.randomUUID()}.${ext}`;
         const filePath = `${folder}/${fileName}`;
 
         const { error } = await supabase.storage.from(BUCKET).upload(filePath, file);

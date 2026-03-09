@@ -91,7 +91,11 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
     }
 
     // Ordena renders numericamente: menor número = índice 0 (capa)
-    resultado.renders.sort((a, b) => numeroRender(a.name) - numeroRender(b.name));
+    resultado.renders.sort((a, b) => {
+        const na = numeroRender(a.name), nb = numeroRender(b.name);
+        if (na === Infinity && nb === Infinity) return a.name.localeCompare(b.name);
+        return na - nb;
+    });
 
     return resultado;
 }

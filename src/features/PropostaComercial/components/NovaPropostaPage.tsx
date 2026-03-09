@@ -65,7 +65,7 @@ export default function NovaPropostaPage({ onSaved }: {
             const [mascarasList, bd, propostas, pref, handle, mascaraAtivaPref] = await Promise.all([
                 templateService.getMascaras(),
                 templateService.getBackdrops(),
-                propostaService.getPropostas(),
+                propostaService.getPropostas(maquinaId),
                 prefService.loadPref(`pasta_ativa_${maquinaId}`).catch(() => null),
                 suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
                 prefService.loadPref(`mascara_ativa_${maquinaId}`).catch(() => null),
@@ -300,11 +300,14 @@ export default function NovaPropostaPage({ onSaved }: {
         if (mascara) {
             try {
                 setLoadingProgress(95);
-                const existentes = await propostaService.getPropostas();
-                const dadosExistentes: Record<string, unknown> = (existentes[0]?.dados as any) ?? {};
+                const mId = getMaquinaId();
+                const existentes = await propostaService.getPropostas(mId);
+                const propostaAtual = existentes.find((p: any) => p.mascara_id === mascara.id) ?? existentes[0] ?? null;
+                const dadosExistentes: Record<string, unknown> = (propostaAtual?.dados as any) ?? {};
                 await propostaService.upsertProposta({
                     nome,
                     mascara_id: mascara.id,
+                    maquina_id: mId,
                     dados: {
                         ...dadosExistentes,
                         ...(briefing ? { briefing } : {}),
@@ -315,7 +318,7 @@ export default function NovaPropostaPage({ onSaved }: {
                             ...(parsed.tamanhoEstande ? { tamanhoEstande: parsed.tamanhoEstande.replace('.', ',') + 'm' } : {}),
                         },
                     },
-                });
+                }, propostaAtual?.id);
             } catch { /* silencioso */ }
         }
         setLoadingPasta(false);
@@ -428,6 +431,7 @@ export default function NovaPropostaPage({ onSaved }: {
             const proposta = await propostaService.upsertProposta({
                 nome: nomeProposta.trim(),
                 mascara_id: mascara.id,
+                maquina_id: getMaquinaId(),
                 dados: {
                     paginas,
                     ...(renderUrls.length ? { renders: renderUrls } : {}),
@@ -435,7 +439,7 @@ export default function NovaPropostaPage({ onSaved }: {
                     ...(briefingData ? { briefing: briefingData } : {}),
                     ...(memorialTexto ? { memorial: memorialTexto } : {}),
                 },
-            });
+            }, savedId ?? undefined);
 
             setSavedId(proposta.id);
             setUploadProgress('');

@@ -11,6 +11,17 @@ Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Produção: isolamento por PC + dirty tracking + preservação de abas + audit fixes**
+- `display:none` nas abas (Templates, Config, Nova, Gerar) — estado React preservado ao trocar abas
+- Dirty tracking: TemplateManager e ConfiguracaoPage reportam alterações não salvas via `onDirtyChange`
+- Modal de confirmação no "Encerrar" — lista WHERE foram as alterações, opções "Voltar e Salvar" / "Sair sem Salvar"
+- Migration `20260309_pc_propostas_maquina_id.sql` — coluna `maquina_id` em `pc_propostas` + índice
+- `propostaService`: `getPropostas(maquinaId)` filtra por PC; `upsertProposta` grava `maquina_id`; busca por `maquina_id + mascara_id` (não mais "a mais recente global")
+- Callers (NovaPropostaPage, GerarPdfPage, MascarasPage) passam `getMaquinaId()` em todas as chamadas
+- Filenames de upload trocados de `Date.now()_Math.random()` para `crypto.randomUUID()` (ambos services)
+- Tipo `Proposta` atualizado com campo `maquina_id`
+
+## ✅ TAREFA ANTERIOR
 **Isolar MascarasPage + URL persistence + remover botão Excluir perigoso**
 - Criado `MascarasModule.tsx` — wrapper leve: Layout("Mascaras") + MascarasPage + overlay GerarPdfPage
 - Rota `/mascaras` adicionada no App.tsx

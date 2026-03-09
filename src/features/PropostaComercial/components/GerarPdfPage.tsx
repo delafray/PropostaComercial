@@ -13,6 +13,7 @@ import { supabase } from '../../../../services/supabaseClient';
 import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
 import { registrarFontes, normalizarFamilia, renderTextoVetor, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
 import { parseBriefingPdf } from '../utils/briefingParser';
+import { getMaquinaId } from '../utils/maquinaId';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -522,7 +523,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             const [mascaras, bd, propostas, refs, handle] = await Promise.all([
                 templateService.getMascaras(),
                 templateService.getBackdrops(),
-                propostaService.getPropostas(),
+                propostaService.getPropostas(getMaquinaId()),
                 templateService.getReferencias().catch(() => []),
                 suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
             ]);
@@ -922,7 +923,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         const descText = parts.slice(3).join('   ');
                         if (descText) {
                             // Word-wrap com métricas reais da fonte
-                            const descLines = fontVetor
+                            const descLines = (fontVetor && maxDescW > 0)
                                 ? wrapTextoMm(fontVetor, descText, maxDescW, sizeMmNormal)
                                 : [descText];
                             for (let dl = 0; dl < descLines.length; dl++) {

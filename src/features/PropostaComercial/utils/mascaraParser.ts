@@ -56,9 +56,11 @@ export async function parseMascaraPdf(
       for (let i = 0; i < opList.fnArray.length; i++) {
         const fn = opList.fnArray[i];
         const a = opList.argsArray[i];
+        if (!a) continue;
 
         // ── Cor RGB ──
         if (fn === pdfjsLib.OPS.setFillRGBColor) {
+          if (a.length < 3) continue;
           fillR = a[0] * 255; fillG = a[1] * 255; fillB = a[2] * 255;
 
         // ── Cor genérica (RGB / CMYK / Gray dependendo do nº de args) ──
@@ -77,6 +79,7 @@ export async function parseMascaraPdf(
 
         // ── Cor CMYK ──
         } else if (fn === pdfjsLib.OPS.setFillCMYKColor) {
+          if (a.length < 4) continue;
           const [c, m, y, k] = a;
           fillR = (1 - c) * (1 - k) * 255;
           fillG = (1 - m) * (1 - k) * 255;
@@ -84,18 +87,19 @@ export async function parseMascaraPdf(
 
         // ── Cor cinza ──
         } else if (fn === pdfjsLib.OPS.setFillGray) {
+          if (a.length < 1) continue;
           fillR = fillG = fillB = a[0] * 255;
 
         // ── constructPath: todos os moveTo/lineTo/re são batched aqui ──
         } else if (fn === pdfjsLib.OPS.constructPath) {
-          const ops = a[0] as number[];
-          const coords = a[1] as number[];
+          const ops = (a[0] as number[]) ?? [];
+          const coords = (a[1] as number[]) ?? [];
           let ci = 0;
           let sub: { x: number; y: number }[] = [];
 
           for (const op of ops) {
             if (op === pdfjsLib.OPS.rectangle) {
-              // re: retângulo direto [x, y, w, h]
+              if (ci + 4 > coords.length) { ci += 4; continue; }
               const rx = coords[ci], ry = coords[ci + 1];
               const rw = coords[ci + 2], rh = coords[ci + 3];
               ci += 4;
@@ -103,11 +107,13 @@ export async function parseMascaraPdf(
               shapes.push({ x: rx, y: ry, w: rw, h: rh, cat: 'slot' });
 
             } else if (op === pdfjsLib.OPS.moveTo) {
-              tryAdd(sub);                    // fecha sub-path anterior
+              if (ci + 2 > coords.length) { ci += 2; continue; }
+              tryAdd(sub);
               sub = [{ x: coords[ci], y: coords[ci + 1] }];
               ci += 2;
 
             } else if (op === pdfjsLib.OPS.lineTo) {
+              if (ci + 2 > coords.length) { ci += 2; continue; }
               sub.push({ x: coords[ci], y: coords[ci + 1] });
               ci += 2;
 

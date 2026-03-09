@@ -55,7 +55,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         Promise.all([
             prefService.loadPref(`pasta_ativa_${maquinaId}`).catch(() => null),
             suportaFSA() ? carregarHandle().catch(() => null) : Promise.resolve(null),
-            propostaService.getPropostas().catch(() => []),
+            propostaService.getPropostas(getMaquinaId()).catch(() => []),
             mc ? loadFontDescritivo(mc) : Promise.resolve(),
         ]).then(([pref, handle, propostas]) => {
             // Proposta vinculada à pasta ativa — nunca usar [0] pois contamina com dados de pasta anterior
@@ -128,7 +128,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         setUltimaPasta(pref);
 
         // Atualiza proposta para a pasta selecionada (busca por nome)
-        propostaService.getPropostas().then((all: Proposta[]) => {
+        propostaService.getPropostas(getMaquinaId()).then((all: Proposta[]) => {
             const match = all.find(p => p.dados?.pasta?.nome === nomePasta) ?? null;
             setProposta(match);
         }).catch(() => {});

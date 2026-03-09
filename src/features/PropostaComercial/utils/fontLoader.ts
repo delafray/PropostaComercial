@@ -115,6 +115,7 @@ export function wrapTextoMm(
     maxWidth_mm: number,
     sizeMm: number,
 ): string[] {
+    if (!font || maxWidth_mm <= 0) return [text];
     const words = text.split(' ');
     const lines: string[] = [];
     let current = '';

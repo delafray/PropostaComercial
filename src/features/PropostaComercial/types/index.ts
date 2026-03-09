@@ -96,6 +96,7 @@ export interface Proposta {
     id: string;
     nome: string;
     mascara_id: string | null;
+    maquina_id: string | null;
     mascara?: Pick<TemplateMascara, 'id' | 'nome'> | null;
     dados: {
         paginas: PropostaDadosPagina[];

@@ -48,10 +48,12 @@ function extract(text: string, regex: RegExp): string | null {
 export async function parseBriefingPdf(file: File): Promise<BriefingData> {
     const buffer = await file.arrayBuffer();
     const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise;
+    if (pdf.numPages < 1) throw new Error('Briefing PDF vazio (0 páginas).');
     const page   = await pdf.getPage(1);
     const content = await page.getTextContent();
 
-    const tokens: string[] = (content.items as any[]).map(it => it.str).filter((s: string) => s.trim());
+    const items = (content.items as any[]) ?? [];
+    const tokens: string[] = items.map(it => it.str).filter((s: string) => s.trim());
     const text = tokens.join(' ');
 
     // Número: "BRIEFING2026.1127-02" → "2026.1127-02"
@@ -140,6 +142,7 @@ export async function parseBriefingPdf(file: File): Promise<BriefingData> {
 // ── Auto-preenchimento do formulário ──────────────────────────────────────────
 
 export function autoMapBriefing(briefing: BriefingData, mascara: TemplateMascara): PageFormData[] {
+    if (!mascara.paginas_config?.length) return [];
     return mascara.paginas_config.map(pagina => {
         const textValues: Record<string, string> = {};
 
