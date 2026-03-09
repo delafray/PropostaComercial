@@ -10,7 +10,7 @@ export default function MascarasModule() {
   const [gerarMascaraId, setGerarMascaraId] = useState<string | null>(null);
 
   return (
-    <Layout title="Mascaras">
+    <Layout title="Renderizar PDF">
       <div className="p-2 sm:p-4">
         <MascarasPage
           onRenderizarPdf={(fontSize, mascaraId) => {

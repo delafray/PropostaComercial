@@ -259,7 +259,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, headerActions, mobileS
             ) : (
               <NavItem to="/propostas" label="Propostas" icon={DocumentIcon} />
             )}
-            <NavItem to="/mascaras" label="Máscaras" icon={MascaraIcon} />
+            <NavItem to="/mascaras" label="Renderizar PDF" icon={MascaraIcon} />
             {user?.canManageTags && <NavItem to="/usuarios" label="Usuários" icon={UsersIcon} />}
 
             {isBiometricsSupported && !user?.isVisitor && (

@@ -9,6 +9,7 @@ import { TemplateMascara, ProjetoInput, Proposta } from '../types';
 import { getMaquinaId } from '../utils/maquinaId';
 import { prefKeyForMascara, SlotDefaults } from './ConfiguracaoPage';
 import { parsePasta } from '../utils/projetoParser';
+import { parseBriefingPdf } from '../utils/briefingParser';
 import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 
 export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (fontSize: number, mascaraId: string) => void } = {}) {
@@ -27,6 +28,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     const [projeto, setProjeto] = useState<ProjetoInput | null>(null);
     const [pastaName, setPastaName] = useState('');
     const [loadingPasta, setLoadingPasta] = useState(false);
+    const [briefingInfo, setBriefingInfo] = useState<{ cliente: string; evento: string; numero: string } | null>(null);
     const [ultimaPasta, setUltimaPasta] = useState<{ nome: string; arquivos: string[]; savedAt: string } | null>(null);
     const [handleSalvo, setHandleSalvo] = useState(false);
     const [error, setError] = useState('');
@@ -107,7 +109,15 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         setPastaName(nomePasta);
         const parsed = parsePasta(files);
         setProjeto(parsed);
+        setBriefingInfo(null);
         setLoadingPasta(false);
+
+        // Parse imediato do briefing — apenas para exibição (cliente, evento, número)
+        if (parsed.briefingPdf) {
+            parseBriefingPdf(parsed.briefingPdf)
+                .then(b => setBriefingInfo({ cliente: b.cliente, evento: b.evento, numero: b.numero }))
+                .catch(() => {});
+        }
 
         // Salva referência da pasta
         const maquinaId = getMaquinaId();
@@ -335,11 +345,21 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
 
                 {projeto && (
                     <div>
-                        <div className="flex items-center gap-2 mb-3 px-1">
-                            <span className="text-sm font-mono font-semibold text-gray-700 truncate">{pastaName}</span>
-                            <span className="text-xs text-gray-400">
-                                · {projeto.renders.length + (projeto.briefingPdf ? 1 : 0) + (projeto.planta ? 1 : 0) + (projeto.memorial ? 1 : 0) + (projeto.logo ? 1 : 0) + (projeto.arquivoTamanho ? 1 : 0)} arquivo(s)
-                            </span>
+                        <div className="mb-3 px-1">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-mono font-semibold text-gray-700 truncate">{pastaName}</span>
+                                <span className="text-xs text-gray-400">
+                                    · {projeto.renders.length + (projeto.briefingPdf ? 1 : 0) + (projeto.planta ? 1 : 0) + (projeto.memorial ? 1 : 0) + (projeto.logo ? 1 : 0) + (projeto.arquivoTamanho ? 1 : 0)} arquivo(s)
+                                </span>
+                            </div>
+                            {briefingInfo && (
+                                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                                    <span className="font-semibold text-gray-700">{briefingInfo.cliente}</span>
+                                    {' · '}
+                                    <span>{briefingInfo.evento}</span>
+                                    {briefingInfo.numero && <span className="text-gray-400 ml-1">#{briefingInfo.numero}</span>}
+                                </p>
+                            )}
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
 
@@ -433,11 +453,6 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                                             : <span className="text-red-500">Sem renders</span>
                                     }
                                 </p>
-                                {proposta.dados?.briefing && (
-                                    <p className="text-xs text-emerald-600 mt-0.5">
-                                        ✓ Briefing: {proposta.dados.briefing.cliente ?? '?'} · {proposta.dados.briefing.evento ?? '?'}
-                                    </p>
-                                )}
                             </div>
                             {rendersSalvos > 0 && (
                                 <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">

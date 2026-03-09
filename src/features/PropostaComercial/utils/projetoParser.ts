@@ -15,10 +15,19 @@ import { ProjetoInput } from '../types';
  */
 
 const RE_RENDER    = /^\d+\.(jpg|jpeg|png)$/i;
-const RE_BRIEFING  = /^\d{4,5}\.pdf$/i;
+const RE_BRIEFING  = /^\d{4,5}(\s*\(\d+\))?\.pdf$/i;  // 9182.pdf ou 9208 (2).pdf
 const RE_PLANTA    = /^planta\.(png|jpg|jpeg|svg)$/i;
 const RE_LOGO      = /^logo\.(png|jpg|jpeg)$/i;
 const RE_TAMANHO   = /(\d+)[,.](\d+)\s*m/i;  // ex: "3,50m" ou "3.50m"
+
+/**
+ * Extrai o número de cópia do nome do arquivo.
+ * "9208.pdf" → 0, "9208 (1).pdf" → 1, "9208 (2).pdf" → 2
+ */
+function numeroCopia(filename: string): number {
+    const m = filename.match(/\((\d+)\)\.pdf$/i);
+    return m ? parseInt(m[1], 10) : 0;
+}
 
 /**
  * Extrai o tamanho do estande do nome do arquivo.
@@ -62,6 +71,8 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
 
     // PDFs que não batem com RE_BRIEFING ficam aqui como fallback
     const pdfsFallback: File[] = [];
+    // Múltiplos candidatos de briefing (ex: 9208.pdf, 9208 (1).pdf, 9208 (2).pdf)
+    const briefingCandidatos: File[] = [];
 
     for (const file of lista) {
         // Usa apenas o nome base (sem subpastas)
@@ -70,7 +81,7 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
         if (RE_RENDER.test(nome)) {
             resultado.renders.push(file);
         } else if (RE_BRIEFING.test(nome)) {
-            resultado.briefingPdf = file;
+            briefingCandidatos.push(file);
         } else if (RE_PLANTA.test(nome)) {
             resultado.planta = file;
         } else if (RE_LOGO.test(nome)) {
@@ -83,6 +94,12 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
         } else if (nome.toLowerCase().endsWith('.pdf')) {
             pdfsFallback.push(file);
         }
+    }
+
+    // Escolhe o briefing com maior número de cópia: 9208 (2).pdf > 9208 (1).pdf > 9208.pdf
+    if (briefingCandidatos.length > 0) {
+        briefingCandidatos.sort((a, b) => numeroCopia(b.name) - numeroCopia(a.name));
+        resultado.briefingPdf = briefingCandidatos[0];
     }
 
     // Fallback: se nenhum PDF com nome numérico foi encontrado, usa o primeiro PDF da pasta
