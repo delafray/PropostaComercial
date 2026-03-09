@@ -68,11 +68,10 @@ function EmailContextPopup({ briefingInfo, onClose }: {
                 </div>
 
                 {/* Aviso contextual */}
-                <div className="mx-5 mt-4 flex items-start gap-3 bg-emerald-900 rounded-lg px-4 py-3.5">
-                    <span className="text-gray-300 text-base shrink-0 mt-0.5">⚠</span>
+                <div className="mx-5 mt-4 bg-emerald-900 rounded-lg px-4 py-3.5 text-center">
                     <p className="text-sm text-gray-300 leading-relaxed">
-                        <span className="font-black text-base block mb-0.5 text-white">Verifique antes de enviar!</span>
-                        Pesquise o assunto no Gmail para confirmar se já existe uma conversa com este cliente — evite duplicar threads.
+                        <span className="font-black text-base block mb-0.5 text-white">⚠ Verifique antes de enviar!</span>
+                        Pesquise o assunto no Gmail para confirmar se já existe uma conversa com este projeto — evite duplicar threads.
                     </p>
                 </div>
 
@@ -108,7 +107,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     const [slotDefaults, setSlotDefaults] = useState<SlotDefaults>({});
     const [loading, setLoading] = useState(true);
     const [fontDescritivo, setFontDescritivo] = useState(7);
-    const [sessionFont, setSessionFont] = useState(7);
+    const [sessionFont, setSessionFont] = useState(9);
 
     // Proposta (DB)
     const [proposta, setProposta] = useState<Proposta | null>(null);
@@ -166,8 +165,8 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         setSlotDefaults(defs);
         const slotDescritivo = Object.values(defs).find((d: any) => d?.scriptName === '01');
         const raw = (slotDescritivo as any)?.fontSize;
-        // fontSize válido para script '01' é 5–9pt; fora disso usa default 7
-        const valor = (typeof raw === 'number' && raw >= 5 && raw <= 9) ? raw : 7;
+        // fontSize válido para script '01' é 5–9pt; fora disso usa default 9
+        const valor = (typeof raw === 'number' && raw >= 5 && raw <= 9) ? raw : 9;
         setFontDescritivo(valor);
         setSessionFont(valor);
     }
@@ -355,8 +354,8 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                         </button>
                         {onRenderizarPdf && (
                             <>
-                                <div className="flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-1.5" title="Fonte do descritivo (session — não salva)">
-                                    <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">Fonte:</span>
+                                <div className="flex items-center gap-1 bg-amber-50 border-2 border-amber-400 rounded-lg px-2 py-1.5" title="Fonte do descritivo (session — não salva)">
+                                    <span className="text-[10px] text-amber-600 font-bold whitespace-nowrap">Fonte:</span>
                                     <input
                                         type="number"
                                         min={5}
@@ -364,9 +363,9 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                                         step={0.5}
                                         value={sessionFont}
                                         onChange={e => setSessionFont(Number(e.target.value))}
-                                        className="w-12 text-xs text-center font-mono border-0 outline-none bg-transparent"
+                                        className="w-10 text-xs text-center font-mono font-bold text-amber-700 border-0 outline-none bg-transparent"
                                     />
-                                    <span className="text-[10px] text-gray-400">pt</span>
+                                    <span className="text-[10px] text-amber-600 font-bold">pt</span>
                                 </div>
                                 <button
                                     type="button"
