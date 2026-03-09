@@ -135,6 +135,11 @@ export async function parseBriefingPdf(file: File): Promise<BriefingData> {
         notLabel(extract(text, /Forma\s+Construtiva\s+(.+?)(?=\s+Fechamento|\s+m²\s|\s*$)/i)) ??
         'N/I';
 
+    // Google Drive link (OBSERVAÇÕES GERAIS)
+    const driveUrl =
+        extract(text, /(https:\/\/drive\.google\.com\/[^\s]+)/) ??
+        null;
+
     const result: any = {
         cliente,
         evento,
@@ -148,6 +153,7 @@ export async function parseBriefingPdf(file: File): Promise<BriefingData> {
         numeroStand,
         areaStand,
         formaConstrutiva,
+        driveUrl,
     };
 
     return result as BriefingData;

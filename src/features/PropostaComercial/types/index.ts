@@ -64,6 +64,7 @@ export interface BriefingData {
     numeroStand: string | null;      // "J64"
     areaStand: string | null;        // "100.00 m²"
     formaConstrutiva: string | null; // "CONSTRUIDO"
+    driveUrl: string | null;         // link Google Drive das OBSERVAÇÕES GERAIS
 }
 
 // ─── Pasta de Projeto (entrada do usuário) ────────────────────────────────────

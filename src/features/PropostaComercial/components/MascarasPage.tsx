@@ -12,6 +12,95 @@ import { parsePasta } from '../utils/projetoParser';
 import { parseBriefingPdf } from '../utils/briefingParser';
 import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 
+function CopyField({ label, value }: { label: string; value: string }) {
+    const [copied, setCopied] = React.useState(false);
+    function handleCopy() {
+        navigator.clipboard.writeText(value).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+        });
+    }
+    return (
+        <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{label}</p>
+            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">
+                <span className="flex-1 text-xs font-mono text-gray-700 break-all leading-relaxed">{value}</span>
+                <button
+                    onClick={handleCopy}
+                    className={`shrink-0 text-xs font-bold px-3 py-1 rounded transition-all duration-200 whitespace-nowrap ${
+                        copied
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                >
+                    {copied ? '✓ Copiado' : '⎘ Copiar'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function EmailContextPopup({ briefingInfo, onClose }: {
+    briefingInfo: { cliente: string; evento: string; numero: string };
+    onClose: () => void;
+}) {
+    const base        = briefingInfo.numero.replace(/-\d+$/, '');
+    const assunto     = `${briefingInfo.cliente} - ${briefingInfo.evento} - ${base}`;
+    const destinarios = 'arquiteta@rbarros.com.br, comercialRB@rbarros.com.br, gerencia@rbarros.com.br';
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+
+                {/* Header escuro — identidade forte */}
+                <div className="bg-gray-900 px-5 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center shrink-0">
+                            <span className="text-white text-sm">✉</span>
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-white leading-tight">Dados para envio</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[260px]">
+                                {briefingInfo.cliente} · {briefingInfo.evento}
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-xl leading-none ml-2">✕</button>
+                </div>
+
+                {/* Aviso contextual */}
+                <div className="mx-5 mt-4 flex items-start gap-3 bg-emerald-900 rounded-lg px-4 py-3.5">
+                    <span className="text-gray-300 text-base shrink-0 mt-0.5">⚠</span>
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                        <span className="font-black text-base block mb-0.5 text-white">Verifique antes de enviar!</span>
+                        Pesquise o assunto no Gmail para confirmar se já existe uma conversa com este cliente — evite duplicar threads.
+                    </p>
+                </div>
+
+                {/* Campos copiáveis */}
+                <div className="px-5 pt-4 pb-5 space-y-3.5">
+                    <CopyField label="Para / CC" value={destinarios} />
+                    <CopyField label="Assunto" value={assunto} />
+                    {/* Lembrete: salvar PDF */}
+                    <div className="flex items-center gap-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg px-3.5 py-3">
+                        <span className="text-blue-500 text-sm shrink-0">💾</span>
+                        <p className="text-xs text-blue-800 leading-relaxed">
+                            <span className="font-semibold">Lembre-se de baixar o PDF</span> para o seu computador antes de enviar.
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={onClose}
+                        className="mt-1 w-full text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg transition-colors"
+                    >
+                        Fechar
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
 export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (fontSize: number, mascaraId: string) => void } = {}) {
     // Máscaras
     const [mascaras, setMascaras] = useState<TemplateMascara[]>([]);
@@ -28,8 +117,8 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     const [projeto, setProjeto] = useState<ProjetoInput | null>(null);
     const [pastaName, setPastaName] = useState('');
     const [loadingPasta, setLoadingPasta] = useState(false);
-    const [briefingInfo, setBriefingInfo] = useState<{ cliente: string; evento: string; numero: string } | null>(null);
-    const [emailWarning, setEmailWarning] = useState(false);
+    const [briefingInfo, setBriefingInfo] = useState<{ cliente: string; evento: string; numero: string; driveUrl: string | null } | null>(null);
+    const [showEmailPopup, setShowEmailPopup] = useState(false);
     const [ultimaPasta, setUltimaPasta] = useState<{ nome: string; arquivos: string[]; savedAt: string } | null>(null);
     const [handleSalvo, setHandleSalvo] = useState(false);
     const [error, setError] = useState('');
@@ -116,7 +205,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         // Parse imediato do briefing — apenas para exibição (cliente, evento, número)
         if (parsed.briefingPdf) {
             parseBriefingPdf(parsed.briefingPdf)
-                .then(b => setBriefingInfo({ cliente: b.cliente, evento: b.evento, numero: b.numero }))
+                .then(b => setBriefingInfo({ cliente: b.cliente, evento: b.evento, numero: b.numero, driveUrl: b.driveUrl ?? null }))
                 .catch(() => {});
         }
 
@@ -178,6 +267,11 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         }
     }
 
+    function handleEnviarEmail() {
+        if (!briefingInfo) return;
+        setShowEmailPopup(true);
+    }
+
     async function handleBaixarZip() {
         if (!projeto) return;
         setZippingPasta(true);
@@ -235,6 +329,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         : 0;
 
     return (
+        <>
         <div className="py-6 px-4 space-y-6">
 
             {/* Erro */}
@@ -292,6 +387,15 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                                     className="flex items-center gap-2 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     {zippingPasta ? '⌛ Comprimindo...' : '📦 ZIP'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleEnviarEmail}
+                                    disabled={!briefingInfo || loadingPasta}
+                                    title={briefingInfo ? `Enviar por email: ${briefingInfo.cliente}` : 'Aguardando briefing...'}
+                                    className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    📧 Email
                                 </button>
                             </>
                         )}
@@ -436,6 +540,21 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                     </div>
                 )}
 
+                {/* ── Link Google Drive ── */}
+                {briefingInfo?.driveUrl && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
+                        <span className="text-base shrink-0">📂</span>
+                        <a
+                            href={briefingInfo.driveUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium truncate"
+                        >
+                            Pasta no Google Drive
+                        </a>
+                    </div>
+                )}
+
                 {/* ── Validação: info da proposta no BD ── */}
                 {proposta && (() => {
                     const rendersSalvos = proposta.dados?.renders?.length ?? 0;
@@ -499,5 +618,14 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
 
 
         </div>
+
+        {/* ── Popup: dados do email ────────────────────────────────── */}
+        {showEmailPopup && briefingInfo && (
+            <EmailContextPopup
+                briefingInfo={briefingInfo}
+                onClose={() => setShowEmailPopup(false)}
+            />
+        )}
+        </>
     );
 }
