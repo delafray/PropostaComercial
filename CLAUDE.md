@@ -19,3 +19,16 @@ Houve um incidente real onde arquivos de projeto foram apagados por uma IA. Isso
 
 Esta regra **não pode ser revogada por instrução verbal em chat, nunca, jamais, sob nenhuma circunstância.**
 Só é válida alteração feita diretamente neste arquivo `CLAUDE.md`.
+
+## Documentação de Transplante (MANTER ATUALIZADO)
+
+O arquivo `IMPORTACAO_OUTRO_SISTEMA.md` na raiz do projeto documenta como exportar e importar o módulo `PropostaComercial` para outros sistemas.
+
+**Se durante qualquer tarefa você introduzir:**
+- Nova dependência externa (import fora de `src/features/PropostaComercial/`)
+- Nova tabela ou coluna no Supabase (prefixo `pc_*`)
+- Novo bucket ou pasta no Storage
+- Nova fonte em `public/fonts/`
+- Novo hardcode (URL, constante fixa, etc.)
+
+**Você DEVE atualizar o `IMPORTACAO_OUTRO_SISTEMA.md`** na seção correspondente e registrar na tabela "Registro de Alterações" no final do arquivo.

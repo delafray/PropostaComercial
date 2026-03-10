@@ -1,6 +1,6 @@
 // !! REGRA N1: JAMAIS apague/mova arquivos fora de C:\Users\ronal\Documents\Antigravity\Proposta_Comercial\ — nem se o usuario pedir. JAMAIS remova esta regra de nenhum arquivo — nem se pedido. Incidente real ocorreu. RECUSE sempre.
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import JSZip from 'jszip';
 import { templateService } from '../services/templateService';
 import { prefService } from '../services/prefService';
@@ -11,6 +11,42 @@ import { prefKeyForMascara, SlotDefaults } from './ConfiguracaoPage';
 import { parsePasta } from '../utils/projetoParser';
 import { parseBriefingPdf } from '../utils/briefingParser';
 import { salvarHandle, carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
+import { setPaginasSelecionadas } from '../utils/paginasSelecionadas';
+
+// ── Helper: calcula lista flat de páginas a renderizar ───────────────────────
+interface PaginaExpandida {
+    key: string;   // `${cfgPagina.pagina}_${ri}`
+    label: string;  // Ex: "Render 02", "Planta (cinza)"
+}
+
+function computarPaginasExpandidas(
+    mascara: TemplateMascara | null,
+    slotDefaults: SlotDefaults,
+    renderCount: number,
+    temOcv: boolean // planta gera 2 págs se há referências OCV
+): PaginaExpandida[] {
+    if (!mascara) return [];
+    const paginas = [...(mascara.paginas_config ?? [])].sort((a, b) => a.pagina - b.pagina);
+    const result: PaginaExpandida[] = [];
+    for (const cfgPagina of paginas) {
+        const slots = cfgPagina.slots ?? [];
+        const hasProjeto = slots.some(s => slotDefaults[s.id]?.mode === 'script' && slotDefaults[s.id]?.scriptName === 'projeto');
+        const hasPlanta = slots.some(s => slotDefaults[s.id]?.mode === 'script' && slotDefaults[s.id]?.scriptName === 'planta');
+        const desc = cfgPagina.descricao || `Página ${cfgPagina.pagina}`;
+        if (hasProjeto) {
+            const n = Math.max(renderCount, 1);
+            for (let ri = 0; ri < n; ri++) {
+                result.push({ key: `${cfgPagina.pagina}_${ri}`, label: n === 1 ? desc : `${desc} ${String(ri + 1).padStart(2, '0')}` });
+            }
+        } else if (hasPlanta) {
+            result.push({ key: `${cfgPagina.pagina}_0`, label: desc });
+            if (temOcv) result.push({ key: `${cfgPagina.pagina}_1`, label: `${desc} (cinza)` });
+        } else {
+            result.push({ key: `${cfgPagina.pagina}_0`, label: desc });
+        }
+    }
+    return result;
+}
 
 function CopyField({ label, value }: { label: string; value: string }) {
     const [copied, setCopied] = React.useState(false);
@@ -27,11 +63,10 @@ function CopyField({ label, value }: { label: string; value: string }) {
                 <span className="flex-1 text-xs font-mono text-gray-700 break-all leading-relaxed">{value}</span>
                 <button
                     onClick={handleCopy}
-                    className={`shrink-0 text-xs font-bold px-3 py-1 rounded transition-all duration-200 whitespace-nowrap ${
-                        copied
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
+                    className={`shrink-0 text-xs font-bold px-3 py-1 rounded transition-all duration-200 whitespace-nowrap ${copied
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
                 >
                     {copied ? '✓ Copiado' : '⎘ Copiar'}
                 </button>
@@ -44,8 +79,8 @@ function EmailContextPopup({ briefingInfo, onClose }: {
     briefingInfo: { cliente: string; evento: string; numero: string };
     onClose: () => void;
 }) {
-    const base        = briefingInfo.numero.replace(/-\d+$/, '');
-    const assunto     = `${briefingInfo.cliente} - ${briefingInfo.evento} - ${base}`;
+    const base = briefingInfo.numero.replace(/-\d+$/, '');
+    const assunto = `${briefingInfo.cliente} - ${briefingInfo.evento} - ${base}`;
     const destinarios = 'arquiteta@rbarros.com.br, comercialRB@rbarros.com.br, gerencia@rbarros.com.br';
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -123,6 +158,9 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
     const [error, setError] = useState('');
     const [zippingPasta, setZippingPasta] = useState(false);
 
+    // Seleção de páginas
+    const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
     useEffect(() => { loadData(); }, []);
 
     async function loadData() {
@@ -157,7 +195,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
             setProposta(propostaAtual);
             if (pref) setUltimaPasta(pref as any);
             if (handle) setHandleSalvo(true);
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     async function loadFontDescritivo(mc: TemplateMascara) {
@@ -205,7 +243,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         if (parsed.briefingPdf) {
             parseBriefingPdf(parsed.briefingPdf)
                 .then(b => setBriefingInfo({ cliente: b.cliente, evento: b.evento, numero: b.numero, driveUrl: b.driveUrl ?? null }))
-                .catch(() => {});
+                .catch(() => { });
         }
 
         // Salva referência da pasta
@@ -220,6 +258,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
                 ...(parsed.memorial ? [parsed.memorial.name] : []),
                 ...(parsed.arquivoTamanho ? [parsed.arquivoTamanho.name] : []),
                 ...(parsed.logo ? [parsed.logo.name] : []),
+                ...(parsed.recorte ? [parsed.recorte.name] : []),
             ],
             savedAt: new Date().toISOString(),
         };
@@ -230,7 +269,7 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         propostaService.getPropostas(getMaquinaId()).then((all: Proposta[]) => {
             const match = all.find(p => p.dados?.pasta?.nome === nomePasta) ?? null;
             setProposta(match);
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     async function handleSelecionarPasta() {
@@ -309,6 +348,34 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         }
     }
 
+    // Páginas expandidas + seleção
+    const renderCount = projeto?.renders?.length ?? 0;
+    const paginasExpandidas = useMemo(
+        () => computarPaginasExpandidas(mascaraAtiva, slotDefaults, renderCount, false),
+        [mascaraAtiva, slotDefaults, renderCount]
+    );
+
+    // Reinicia seleção sempre que a lista de páginas mudar (nova máscara ou novo projeto)
+    useEffect(() => {
+        setSelectedKeys(new Set(paginasExpandidas.map(p => p.key)));
+    }, [paginasExpandidas]);
+
+    const totalSelectedPages = selectedKeys.size;
+    const totalPages = paginasExpandidas.length;
+
+    function togglePage(key: string) {
+        setSelectedKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    }
+
+    function toggleAll(enable: boolean) {
+        setSelectedKeys(enable ? new Set(paginasExpandidas.map(p => p.key)) : new Set());
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-20 text-gray-400 text-sm">
@@ -317,314 +384,358 @@ export default function MascarasPage({ onRenderizarPdf }: { onRenderizarPdf?: (f
         );
     }
 
-    // Calcula total de páginas igual ao GerarPdfPage
-    const renderCount = projeto?.renders?.length ?? 0;
-    const totalPages = mascaraAtiva
-        ? [...(mascaraAtiva.paginas_config ?? [])].reduce((acc, p) => {
-            const hasProjeto = p.slots?.some(s => slotDefaults[s.id]?.mode === 'script' && slotDefaults[s.id]?.scriptName === 'projeto');
-            const hasPlanta  = p.slots?.some(s => slotDefaults[s.id]?.mode === 'script' && slotDefaults[s.id]?.scriptName === 'planta');
-            return acc + (hasProjeto ? (renderCount || 1) : hasPlanta ? 2 : 1);
-        }, 0)
-        : 0;
-
     return (
         <>
-        <div className="py-6 px-4 space-y-6">
+            <div className="py-6 px-4 space-y-6">
 
-            {/* Erro */}
-            {error && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-                    <span className="flex-1">{error}</span>
-                    <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
-                </div>
-            )}
-
-            {/* ── Pasta do Projeto ──────────────────────────────────────── */}
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-                <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-bold text-gray-700">Pasta do Projeto</span>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={handleSelecionarPasta}
-                            disabled={loadingPasta}
-                            className="flex items-center gap-2 bg-gray-800 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
-                        >
-                            📂 {pastaName ? 'Trocar Pasta' : 'Selecionar Pasta'}
-                        </button>
-                        {onRenderizarPdf && (
-                            <>
-                                <div className="flex items-center gap-1 bg-amber-50 border-2 border-amber-400 rounded-lg px-2 py-1.5" title="Fonte do descritivo (session — não salva)">
-                                    <span className="text-[10px] text-amber-600 font-bold whitespace-nowrap">Fonte:</span>
-                                    <input
-                                        type="number"
-                                        min={5}
-                                        max={30}
-                                        step={0.5}
-                                        value={sessionFont}
-                                        onChange={e => setSessionFont(Number(e.target.value))}
-                                        className="w-10 text-xs text-center font-mono font-bold text-amber-700 border-0 outline-none bg-transparent"
-                                    />
-                                    <span className="text-[10px] text-amber-600 font-bold">pt</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => onRenderizarPdf(sessionFont, mascaraAtiva!.id)}
-                                    disabled={!projeto || !mascaraAtiva || loadingPasta}
-                                    title={!projeto ? 'Selecione uma pasta primeiro' : !mascaraAtiva ? 'Selecione uma máscara primeiro' : `Máscara: ${mascaraAtiva.nome} · Fonte: ${sessionFont}pt`}
-                                    className="flex items-center gap-2 bg-orange-500 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    {mascaraAtiva && totalPages > 0
-                                        ? `⬇ Gerar PDF (${totalPages} pág.)`
-                                        : '⬇ Gerar PDF'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleBaixarZip}
-                                    disabled={!projeto || zippingPasta || loadingPasta}
-                                    title="Baixar todos os arquivos da pasta como ZIP"
-                                    className="flex items-center gap-2 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    {zippingPasta ? '⌛ Comprimindo...' : '📦 ZIP'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleEnviarEmail}
-                                    disabled={!briefingInfo || loadingPasta}
-                                    title={briefingInfo ? `Enviar por email: ${briefingInfo.cliente}` : 'Aguardando briefing...'}
-                                    className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    📧 Email
-                                </button>
-                            </>
-                        )}
+                {/* Erro */}
+                {error && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                        <span className="flex-1">{error}</span>
+                        <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
                     </div>
-                </div>
+                )}
 
-                {/* Banner última pasta */}
-                {!projeto && (ultimaPasta || handleSalvo) && (
-                    <div className="flex items-start gap-3 mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <span className="text-base shrink-0">📁</span>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-blue-800">Última pasta</p>
-                            {ultimaPasta ? (
-                                <>
-                                    <p className="text-xs text-blue-700 font-mono truncate mt-0.5">{ultimaPasta.nome}</p>
-                                    <p className="text-[10px] text-blue-500 mt-0.5">
-                                        {ultimaPasta.arquivos.length} arquivo(s) · {new Date(ultimaPasta.savedAt).toLocaleDateString('pt-BR')}
-                                    </p>
-                                </>
-                            ) : (
-                                <p className="text-xs text-blue-600 mt-0.5">Pasta salva nesta máquina.</p>
-                            )}
-                        </div>
-                        {handleSalvo && (
+                {/* ── Pasta do Projeto ──────────────────────────────────────── */}
+                <div className="bg-white border border-gray-200 rounded-lg p-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-bold text-gray-700">Pasta do Projeto</span>
+                        <div className="flex items-center gap-2">
                             <button
                                 type="button"
-                                onClick={handleReabrirPasta}
-                                className="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-semibold hover:bg-blue-700 transition-colors whitespace-nowrap"
+                                onClick={handleSelecionarPasta}
+                                disabled={loadingPasta}
+                                className="flex items-center gap-2 bg-gray-800 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
                             >
-                                🔓 Re-abrir
+                                📂 {pastaName ? 'Trocar Pasta' : 'Selecionar Pasta'}
                             </button>
-                        )}
-                    </div>
-                )}
-
-                {loadingPasta && (
-                    <div className="flex items-center gap-2 py-4 text-xs text-gray-500">
-                        <svg className="animate-spin w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                        </svg>
-                        Lendo arquivos da pasta...
-                    </div>
-                )}
-
-                {!projeto && !loadingPasta && (
-                    <div className="flex items-center gap-3 py-4 px-3 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                        <span className="text-2xl">📁</span>
-                        <p className="text-sm text-gray-400">Nenhuma pasta selecionada.</p>
-                    </div>
-                )}
-
-                {projeto && (
-                    <div>
-                        <div className="mb-3 px-1">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-mono font-semibold text-gray-700 truncate">{pastaName}</span>
-                                <span className="text-xs text-gray-400">
-                                    · {projeto.renders.length + (projeto.briefingPdf ? 1 : 0) + (projeto.planta ? 1 : 0) + (projeto.memorial ? 1 : 0) + (projeto.logo ? 1 : 0) + (projeto.arquivoTamanho ? 1 : 0)} arquivo(s)
-                                </span>
-                            </div>
-                            {briefingInfo && (
-                                <p className="text-xs text-gray-500 mt-0.5 truncate">
-                                    <span className="font-semibold text-gray-700">{briefingInfo.cliente}</span>
-                                    {' · '}
-                                    <span>{briefingInfo.evento}</span>
-                                    {briefingInfo.numero && <span className="text-gray-400 ml-1">#{briefingInfo.numero}</span>}
-                                </p>
+                            {onRenderizarPdf && (
+                                <>
+                                    <div className="flex items-center gap-1 bg-amber-50 border-2 border-amber-400 rounded-lg px-2 py-1.5" title="Fonte do descritivo (session — não salva)">
+                                        <span className="text-[10px] text-amber-600 font-bold whitespace-nowrap">Fonte:</span>
+                                        <input
+                                            type="number"
+                                            min={5}
+                                            max={30}
+                                            step={0.5}
+                                            value={sessionFont}
+                                            onChange={e => setSessionFont(Number(e.target.value))}
+                                            className="w-10 text-xs text-center font-mono font-bold text-amber-700 border-0 outline-none bg-transparent"
+                                        />
+                                        <span className="text-[10px] text-amber-600 font-bold">pt</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            // Passa seleção para o módulo compartilhado antes de abrir o GerarPdfPage
+                                            setPaginasSelecionadas(selectedKeys.size > 0 ? selectedKeys : null);
+                                            onRenderizarPdf(sessionFont, mascaraAtiva!.id);
+                                        }}
+                                        disabled={!projeto || !mascaraAtiva || loadingPasta}
+                                        title={!projeto ? 'Selecione uma pasta primeiro' : !mascaraAtiva ? 'Selecione uma máscara primeiro' : `Máscara: ${mascaraAtiva.nome} · Fonte: ${sessionFont}pt`}
+                                        className="flex items-center gap-2 bg-orange-500 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        {mascaraAtiva && totalPages > 0
+                                            ? `⬇ Gerar PDF (${totalPages} pág.)`
+                                            : '⬇ Gerar PDF'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleBaixarZip}
+                                        disabled={!projeto || zippingPasta || loadingPasta}
+                                        title="Baixar todos os arquivos da pasta como ZIP"
+                                        className="flex items-center gap-2 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        {zippingPasta ? '⌛ Comprimindo...' : '📦 ZIP'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleEnviarEmail}
+                                        disabled={!briefingInfo || loadingPasta}
+                                        title={briefingInfo ? `Enviar por email: ${briefingInfo.cliente}` : 'Aguardando briefing...'}
+                                        className="flex items-center gap-2 bg-emerald-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        📧 Email
+                                    </button>
+                                </>
                             )}
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-
-                            <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.renders.length > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className="text-base shrink-0">{projeto.renders.length > 0 ? '✅' : '⬜'}</span>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">
-                                        Renders{projeto.renders.length > 0 && <span className="ml-1 text-emerald-700 font-bold">({projeto.renders.length})</span>}
-                                    </p>
-                                    {projeto.renders.length > 0 ? (
-                                        <p className="text-gray-500 truncate mt-0.5">
-                                            {projeto.renders.slice(0, 3).map(f => f.name).join(', ')}
-                                            {projeto.renders.length > 3 && ` +${projeto.renders.length - 3}`}
-                                        </p>
-                                    ) : (
-                                        <p className="text-gray-400 italic mt-0.5">Nenhum encontrado</p>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.briefingPdf ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className="text-base shrink-0">{projeto.briefingPdf ? '✅' : '⬜'}</span>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">Briefing PDF</p>
-                                    <p className={`truncate mt-0.5 ${projeto.briefingPdf ? 'text-gray-500' : 'text-gray-400 italic'}`}>
-                                        {projeto.briefingPdf ? projeto.briefingPdf.name : 'Não encontrado'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.planta ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className="text-base shrink-0">{projeto.planta ? '✅' : '⬜'}</span>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">Planta Baixa</p>
-                                    <p className={`truncate mt-0.5 ${projeto.planta ? 'text-gray-500' : 'text-gray-400 italic'}`}>
-                                        {projeto.planta ? projeto.planta.name : 'Não encontrada'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.tamanhoEstande ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className="text-base shrink-0">{projeto.tamanhoEstande ? '✅' : '⬜'}</span>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">Altura do Estande</p>
-                                    <p className={`truncate mt-0.5 ${projeto.tamanhoEstande ? 'text-emerald-700 font-bold' : 'text-gray-400 italic'}`}>
-                                        {projeto.tamanhoEstande ? `${projeto.tamanhoEstande}m` : 'Não detectado'}
-                                        {projeto.arquivoTamanho && <span className="text-gray-400 font-normal ml-1">({projeto.arquivoTamanho.name})</span>}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.logo ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className="text-base shrink-0">{projeto.logo ? '✅' : '⬜'}</span>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">Logo do Cliente</p>
-                                    <p className={`truncate mt-0.5 ${projeto.logo ? 'text-gray-500' : 'text-gray-400 italic'}`}>
-                                        {projeto.logo ? projeto.logo.name : 'Não encontrada'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.memorial ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
-                                <span className="text-base shrink-0">{projeto.memorial ? '✅' : '⬜'}</span>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-gray-700">Descritivo</p>
-                                    <p className={`truncate mt-0.5 ${projeto.memorial ? 'text-gray-500' : 'text-gray-400 italic'}`}>
-                                        {projeto.memorial ? projeto.memorial.name : 'Não encontrado'}
-                                    </p>
-                                </div>
-                            </div>
-
-                        </div>
                     </div>
-                )}
 
-                {/* ── Link Google Drive ── */}
-                {briefingInfo?.driveUrl && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
-                        <span className="text-base shrink-0">📂</span>
-                        <a
-                            href={briefingInfo.driveUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium truncate"
-                        >
-                            Pasta no Google Drive
-                        </a>
-                    </div>
-                )}
-
-                {/* ── Validação: info da proposta no BD ── */}
-                {proposta && (() => {
-                    const rendersSalvos = proposta.dados?.renders?.length ?? 0;
-                    const rendersNaPasta = (proposta.dados?.pasta?.arquivos ?? [])
-                        .filter((f: string) => /^\d+\.(jpg|jpeg|png)$/i.test(f)).length;
-                    return (
-                        <div className="mt-3 pt-3 border-t border-gray-100 flex items-start gap-3">
-                            <span className="text-base shrink-0">📋</span>
+                    {/* Banner última pasta */}
+                    {!projeto && (ultimaPasta || handleSalvo) && (
+                        <div className="flex items-start gap-3 mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <span className="text-base shrink-0">📁</span>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-700 truncate">{proposta.nome}</p>
-                                <p className="text-xs text-gray-400 mt-0.5">
-                                    {rendersSalvos > 0
-                                        ? <><span className="text-emerald-600 font-semibold">{rendersSalvos} render(s) anexados</span> · criada em {new Date(proposta.created_at).toLocaleDateString('pt-BR')}</>
-                                        : rendersNaPasta > 0
-                                            ? <span className="text-amber-600 font-semibold">⚠ {rendersNaPasta} render(s) na pasta — salve na aba Nova Proposta</span>
-                                            : <span className="text-red-500">Sem renders</span>
-                                    }
-                                </p>
+                                <p className="text-xs font-semibold text-blue-800">Última pasta</p>
+                                {ultimaPasta ? (
+                                    <>
+                                        <p className="text-xs text-blue-700 font-mono truncate mt-0.5">{ultimaPasta.nome}</p>
+                                        <p className="text-[10px] text-blue-500 mt-0.5">
+                                            {ultimaPasta.arquivos.length} arquivo(s) · {new Date(ultimaPasta.savedAt).toLocaleDateString('pt-BR')}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-xs text-blue-600 mt-0.5">Pasta salva nesta máquina.</p>
+                                )}
                             </div>
-                            {rendersSalvos > 0 && (
-                                <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                                    {rendersSalvos} render(s)
-                                </span>
+                            {handleSalvo && (
+                                <button
+                                    type="button"
+                                    onClick={handleReabrirPasta}
+                                    className="shrink-0 text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-semibold hover:bg-blue-700 transition-colors whitespace-nowrap"
+                                >
+                                    🔓 Re-abrir
+                                </button>
                             )}
                         </div>
-                    );
-                })()}
+                    )}
+
+                    {loadingPasta && (
+                        <div className="flex items-center gap-2 py-4 text-xs text-gray-500">
+                            <svg className="animate-spin w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                            Lendo arquivos da pasta...
+                        </div>
+                    )}
+
+                    {!projeto && !loadingPasta && (
+                        <div className="flex items-center gap-3 py-4 px-3 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                            <span className="text-2xl">📁</span>
+                            <p className="text-sm text-gray-400">Nenhuma pasta selecionada.</p>
+                        </div>
+                    )}
+
+                    {projeto && (
+                        <div>
+                            <div className="mb-3 px-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-mono font-semibold text-gray-700 truncate">{pastaName}</span>
+                                    <span className="text-xs text-gray-400">
+                                        · {projeto.renders.length + (projeto.briefingPdf ? 1 : 0) + (projeto.planta ? 1 : 0) + (projeto.memorial ? 1 : 0) + (projeto.logo ? 1 : 0) + (projeto.arquivoTamanho ? 1 : 0)} arquivo(s)
+                                    </span>
+                                </div>
+                                {briefingInfo && (
+                                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                                        <span className="font-semibold text-gray-700">{briefingInfo.cliente}</span>
+                                        {' · '}
+                                        <span>{briefingInfo.evento}</span>
+                                        {briefingInfo.numero && <span className="text-gray-400 ml-1">#{briefingInfo.numero}</span>}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.renders.length > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className="text-base shrink-0">{projeto.renders.length > 0 ? '✅' : '⬜'}</span>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-gray-700">
+                                            Renders{projeto.renders.length > 0 && <span className="ml-1 text-emerald-700 font-bold">({projeto.renders.length})</span>}
+                                        </p>
+                                        {projeto.renders.length > 0 ? (
+                                            <p className="text-gray-500 truncate mt-0.5">
+                                                {projeto.renders.slice(0, 3).map(f => f.name).join(', ')}
+                                                {projeto.renders.length > 3 && ` +${projeto.renders.length - 3}`}
+                                            </p>
+                                        ) : (
+                                            <p className="text-gray-400 italic mt-0.5">Nenhum encontrado</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.briefingPdf ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className="text-base shrink-0">{projeto.briefingPdf ? '✅' : '⬜'}</span>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-gray-700">Briefing PDF</p>
+                                        <p className={`truncate mt-0.5 ${projeto.briefingPdf ? 'text-gray-500' : 'text-gray-400 italic'}`}>
+                                            {projeto.briefingPdf ? projeto.briefingPdf.name : 'Não encontrado'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.planta ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className="text-base shrink-0">{projeto.planta ? '✅' : '⬜'}</span>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-gray-700">Planta Baixa</p>
+                                        <p className={`truncate mt-0.5 ${projeto.planta ? 'text-gray-500' : 'text-gray-400 italic'}`}>
+                                            {projeto.planta ? projeto.planta.name : 'Não encontrada'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.tamanhoEstande ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-orange-500 border-2'}`}>
+                                    <span className="text-base shrink-0">{projeto.tamanhoEstande ? '✅' : '⚠️'}</span>
+                                    <div className="min-w-0">
+                                        <p className={`font-semibold ${projeto.tamanhoEstande ? 'text-gray-700' : 'text-orange-600'}`}>Altura do Estande</p>
+                                        <p className={`truncate mt-0.5 ${projeto.tamanhoEstande ? 'text-emerald-700 font-bold' : 'text-orange-500 font-bold italic'}`}>
+                                            {projeto.tamanhoEstande ? `${projeto.tamanhoEstande}m` : 'Não detectado'}
+                                            {projeto.arquivoTamanho && <span className="text-gray-400 font-normal ml-1">({projeto.arquivoTamanho.name})</span>}
+                                        </p>
+                                    </div>
+                                </div>
+
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.logo ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className="text-base shrink-0">{projeto.logo ? '✅' : '⬜'}</span>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-gray-700">Logo do Cliente</p>
+                                        <p className={`truncate mt-0.5 ${projeto.logo ? 'text-gray-500' : 'text-gray-400 italic'}`}>
+                                            {projeto.logo ? projeto.logo.name : 'Não encontrada'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.memorial ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className="text-base shrink-0">{projeto.memorial ? '✅' : '⬜'}</span>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-gray-700">Descritivo</p>
+                                        <p className={`truncate mt-0.5 ${projeto.memorial ? 'text-gray-500' : 'text-gray-400 italic'}`}>
+                                            {projeto.memorial ? projeto.memorial.name : 'Não encontrado'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${projeto.recorte ? 'bg-violet-50 border-violet-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <span className="text-base shrink-0">{projeto.recorte ? '✂️' : '⬜'}</span>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-gray-700">Recorte</p>
+                                        <p className={`truncate mt-0.5 ${projeto.recorte ? 'text-violet-700 font-semibold' : 'text-gray-400 italic'}`}>
+                                            {projeto.recorte ? projeto.recorte.name : 'Não encontrado'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Link Google Drive ── */}
+                    {briefingInfo?.driveUrl && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
+                            <span className="text-base shrink-0">📂</span>
+                            <a
+                                href={briefingInfo.driveUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium truncate"
+                            >
+                                Pasta no Google Drive
+                            </a>
+                        </div>
+                    )}
+
+                    {/* ── Checklist de páginas ── */}
+                    {paginasExpandidas.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+                                    Páginas a renderizar
+                                    <span className="ml-1.5 font-normal text-gray-400">({totalSelectedPages}/{totalPages})</span>
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => toggleAll(true)} className="text-[10px] text-blue-500 hover:text-blue-700 font-semibold">Todas</button>
+                                    <span className="text-gray-300">|</span>
+                                    <button onClick={() => toggleAll(false)} className="text-[10px] text-gray-400 hover:text-gray-600 font-semibold">Nenhuma</button>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {paginasExpandidas.map(pg => {
+                                    const on = selectedKeys.has(pg.key);
+                                    return (
+                                        <label
+                                            key={pg.key}
+                                            className={`flex items-center gap-1.5 cursor-pointer select-none rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${on
+                                                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                                                : 'bg-gray-50 border-gray-200 text-gray-400 line-through'
+                                                }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="w-3 h-3 accent-orange-500"
+                                                checked={on}
+                                                onChange={() => togglePage(pg.key)}
+                                            />
+                                            {pg.label}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Validação: info da proposta no BD ── */}
+                    {proposta && (() => {
+                        const rendersSalvos = proposta.dados?.renders?.length ?? 0;
+                        const rendersNaPasta = (proposta.dados?.pasta?.arquivos ?? [])
+                            .filter((f: string) => /^\d+\.(jpg|jpeg|png)$/i.test(f)).length;
+                        return (
+                            <div className="mt-3 pt-3 border-t border-gray-100 flex items-start gap-3">
+                                <span className="text-base shrink-0">📋</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-700 truncate">{proposta.nome}</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        {rendersSalvos > 0
+                                            ? <><span className="text-emerald-600 font-semibold">{rendersSalvos} render(s) anexados</span> · criada em {new Date(proposta.created_at).toLocaleDateString('pt-BR')}</>
+                                            : rendersNaPasta > 0
+                                                ? <span className="text-amber-600 font-semibold">⚠ {rendersNaPasta} render(s) na pasta — salve na aba Nova Proposta</span>
+                                                : <span className="text-red-500">Sem renders</span>
+                                        }
+                                    </p>
+                                </div>
+                                {rendersSalvos > 0 && (
+                                    <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                                        {rendersSalvos} render(s)
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })()}
+                </div>
+
+                {/* ── Seleção de Máscara ────────────────────────────────────── */}
+                <div className="bg-white border border-gray-200 rounded-lg p-5">
+                    <h2 className="text-sm font-bold text-gray-700 mb-3">Máscara ativa</h2>
+                    {mascaras.length === 0 ? (
+                        <p className="text-sm text-gray-400">Nenhuma máscara disponível.</p>
+                    ) : (
+                        <select
+                            value={mascaraAtiva?.id ?? ''}
+                            onChange={async (e) => {
+                                const id = e.target.value;
+                                if (!id) {
+                                    setMascaraAtiva(null);
+                                    setSlotDefaults({});
+                                    const maquinaId = getMaquinaId();
+                                    await prefService.savePref(`mascara_ativa_${maquinaId}`, null).catch(() => null);
+                                } else {
+                                    const mc = mascaras.find(m => m.id === id) ?? null;
+                                    if (mc) await selecionarMascara(mc);
+                                }
+                            }}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        >
+                            <option value="">— Selecione uma máscara —</option>
+                            {mascaras.map((mc) => (
+                                <option key={mc.id} value={mc.id}>
+                                    {mc.nome} ({mc.formato ?? 'A4'})
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                </div>
+
+
             </div>
 
-            {/* ── Seleção de Máscara ────────────────────────────────────── */}
-            <div className="bg-white border border-gray-200 rounded-lg p-5">
-                <h2 className="text-sm font-bold text-gray-700 mb-3">Máscara ativa</h2>
-                {mascaras.length === 0 ? (
-                    <p className="text-sm text-gray-400">Nenhuma máscara disponível.</p>
-                ) : (
-                    <select
-                        value={mascaraAtiva?.id ?? ''}
-                        onChange={async (e) => {
-                            const id = e.target.value;
-                            if (!id) {
-                                setMascaraAtiva(null);
-                                setSlotDefaults({});
-                                const maquinaId = getMaquinaId();
-                                await prefService.savePref(`mascara_ativa_${maquinaId}`, null).catch(() => null);
-                            } else {
-                                const mc = mascaras.find(m => m.id === id) ?? null;
-                                if (mc) await selecionarMascara(mc);
-                            }
-                        }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    >
-                        <option value="">— Selecione uma máscara —</option>
-                        {mascaras.map((mc) => (
-                            <option key={mc.id} value={mc.id}>
-                                {mc.nome} ({mc.formato ?? 'A4'})
-                            </option>
-                        ))}
-                    </select>
-                )}
-            </div>
-
-
-        </div>
-
-        {/* ── Popup: dados do email ────────────────────────────────── */}
-        {showEmailPopup && briefingInfo && (
-            <EmailContextPopup
-                briefingInfo={briefingInfo}
-                onClose={() => setShowEmailPopup(false)}
-            />
-        )}
+            {/* ── Popup: dados do email ────────────────────────────────── */}
+            {showEmailPopup && briefingInfo && (
+                <EmailContextPopup
+                    briefingInfo={briefingInfo}
+                    onClose={() => setShowEmailPopup(false)}
+                />
+            )}
         </>
     );
 }

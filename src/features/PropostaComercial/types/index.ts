@@ -84,6 +84,8 @@ export interface ProjetoInput {
     tamanhoEstande: string | null;
     /** Arquivo original que continha o tamanho (para referência) */
     arquivoTamanho: File | null;
+    /** Imagem de recorte/detalhe para posicionamento manual. Ex: recorte.jpg */
+    recorte: File | null;
 }
 
 // ─── Proposta Comercial ───────────────────────────────────────────────────────

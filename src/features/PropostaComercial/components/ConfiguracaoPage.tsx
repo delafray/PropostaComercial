@@ -26,6 +26,10 @@ export function prefKeyForMascara(mascaraId: string) {
     return `slot_defaults_${mascaraId}`;
 }
 
+export function prefKeyForRecorte(mascaraId: string) {
+    return `recorte_page_${mascaraId}`;
+}
+
 // ── Constantes ─────────────────────────────────────────────────────────────────
 
 const FONTS = [
@@ -140,6 +144,7 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState('');
     const [defaults, setDefaults] = useState<SlotDefaults>({});
+    const [recortePage, setRecortePage] = useState<string>('');
     const touchedRef = React.useRef(false);
 
     useEffect(() => { loadData(); }, [mascaraId]);
@@ -153,7 +158,11 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
                 : mascaras[0] ?? null;
             setMascara(mc);
             if (mc) {
-                const savedData = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
+                const [savedData, savedRecortePag] = await Promise.all([
+                    prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null),
+                    prefService.loadPref(prefKeyForRecorte(mc.id)).catch(() => null),
+                ]);
+                setRecortePage(savedRecortePag != null ? String(savedRecortePag) : '');
                 const savedDefaults = (savedData as SlotDefaults) ?? {};
                 const init: SlotDefaults = {};
                 for (const pagina of mc.paginas_config) {
@@ -196,7 +205,11 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
         setSaving(true);
         setError('');
         try {
-            await prefService.savePref(prefKeyForMascara(mascara.id), defaults);
+            const recortePageNum = recortePage !== '' ? Number(recortePage) : null;
+            await Promise.all([
+                prefService.savePref(prefKeyForMascara(mascara.id), defaults),
+                prefService.savePref(prefKeyForRecorte(mascara.id), recortePageNum),
+            ]);
             setSaved(true);
             touchedRef.current = false;
             onDirtyChange?.('Configuração', false);
@@ -259,6 +272,48 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
                     <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 shrink-0">✕</button>
                 </div>
             )}
+
+            {/* ── Configuração de Recorte ─────────────────────────────────── */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-2">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center shrink-0">
+                        <span className="text-violet-600 text-sm">✂</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-800">Página do Recorte</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                            Se existir um arquivo <code className="font-mono bg-gray-100 px-1 rounded">recorte.jpg</code> na pasta, ele será posicionado interativamente nesta página durante a geração.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                            type="number"
+                            min={1}
+                            max={99}
+                            value={recortePage}
+                            onChange={e => {
+                                setRecortePage(e.target.value);
+                                if (!touchedRef.current) {
+                                    touchedRef.current = true;
+                                    onDirtyChange?.('Configuração', true);
+                                }
+                            }}
+                            placeholder="—"
+                            className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center font-mono focus:outline-none focus:border-violet-400"
+                        />
+                        {recortePage && (
+                            <button
+                                type="button"
+                                onClick={() => { setRecortePage(''); if (!touchedRef.current) { touchedRef.current = true; onDirtyChange?.('Configuração', true); } }}
+                                className="text-gray-400 hover:text-red-500 transition-colors text-sm"
+                                title="Limpar"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             <div className="space-y-4">
                 {mascara.paginas_config.map((pagina: PaginaConfig, pi: number) => {

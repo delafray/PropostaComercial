@@ -7,13 +7,15 @@ import { templateService } from '../services/templateService';
 import { propostaService } from '../services/propostaService';
 import { TemplateMascara, TemplateBackdrop, PaginaConfig, SlotElemento, Proposta } from '../types';
 import PdfActionModal from './PdfActionModal';
+import RecortePlacementModal from './RecortePlacementModal';
 import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 import { prefService } from '../services/prefService';
 import { supabase } from '../../../../services/supabaseClient';
-import { SlotDefaults, prefKeyForMascara } from './ConfiguracaoPage';
+import { SlotDefaults, prefKeyForMascara, prefKeyForRecorte } from './ConfiguracaoPage';
 import { registrarFontes, normalizarFamilia, renderTextoVetor, renderTextoVetorJustify, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
 import { parseBriefingPdf } from '../utils/briefingParser';
 import { getMaquinaId } from '../utils/maquinaId';
+import { isPageEnabled } from '../utils/paginasSelecionadas';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -512,6 +514,12 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
     const [debugMode, setDebugMode] = useState(false);
     const [slotDefaults, setSlotDefaults] = useState<SlotDefaults>({});
     const [referenciasOCV, setReferenciasOCV] = useState<TemplateReferencia[]>([]);
+    const [recortePaginaNum, setRecortePaginaNum] = useState<number | null>(null);
+    const [showRecorteModal, setShowRecorteModal] = useState(false);
+    const [recorteFileForModal, setRecorteFileForModal] = useState<File | null>(null);
+    const [recorteModalResolver, setRecorteModalResolver] = useState<((pos: { x: number; y: number; w: number; h: number } | null) => void) | null>(null);
+    const [recortePreviewUrl, setRecortePreviewUrl] = useState<string | null>(null);
+    const [recortePhysicalPage, setRecortePhysicalPage] = useState<number | null>(null);
 
     useEffect(() => { loadData(); }, []);
     // Quando autoGenerate=true, dispara gerarPdf assim que o loading terminar
@@ -543,8 +551,12 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             setProposta(propostaAtual);
 
             if (mc) {
-                const savedDefs = await prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null);
+                const [savedDefs, savedRecortePag] = await Promise.all([
+                    prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null),
+                    prefService.loadPref(prefKeyForRecorte(mc.id)).catch(() => null),
+                ]);
                 setSlotDefaults((savedDefs as SlotDefaults) ?? {});
+                setRecortePaginaNum(savedRecortePag != null ? Number(savedRecortePag) : null);
             }
 
             if (handle) {
@@ -594,6 +606,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
         setProgress('Iniciando...');
 
         let renderUrls: string[] = [];
+        let recortePreviewBlobUrl = '';
         try {
             const W = 297, H = 210;
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -614,6 +627,9 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     setArquivosLocais(arquivos);
                 }
             }
+
+            // ── Recorte: detecta o arquivo (posicionamento ocorre após geração) ─
+            const recorteFile = arquivos.find(f => /^recorte\.(jpg|jpeg|png|svg)$/i.test(f.name)) ?? null;
 
             // ── Renders (fonte de verdade: pasta local) ───────────────────────
             // Pasta carregada → usa exatamente os arquivos que existem nela, sem consultar BD.
@@ -1112,7 +1128,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     const text = nameToValue[slot.nome] ?? '';
                     const slotDef = slotDefaults[slot.id];
 
-                    if (linesOverride && slotDef?.scriptName !== '01') continue;
+                    if (linesOverride && slotDef?.scriptName && slotDef.scriptName !== '01') continue;
                     if (!text && !linesOverride) continue;
 
                     if (slotDef?.scriptName === '01') {
@@ -1176,7 +1192,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             }
 
             let pageIndex = 0;
-
+            let recortePdfPageNum: number | null = null; // página física (1-based) da cfgPagina do recorte
 
             // ── Loop Unificado de Páginas ──────────────────────────────────────
 
@@ -1254,6 +1270,9 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     : plantaSlot ? (referenciasOCV.length > 0 ? 2 : 1) : 1;
 
                 for (let ri = 0; ri < timesToRepeat; ri++) {
+                    // Pula página se o usuário desmarcou no checklist
+                    if (!isPageEnabled(cfgPagina.pagina, ri)) continue;
+
                     let remainingLines: string[] | undefined = undefined;
                     let overflowGuard = 0;
                     do {
@@ -1263,6 +1282,10 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         }
                         setProgress(`Gerando ${cfgPagina.descricao || `Página ${cfgPagina.pagina}`}${projetoSlot && timesToRepeat > 1 ? ` (${ri + 1}/${timesToRepeat})` : ''}...`);
                         if (pageIndex > 0) doc.addPage();
+                        // Captura a página física real desta cfgPagina para o recorte
+                        if (cfgPagina.pagina === recortePaginaNum && ri === 0 && overflowGuard === 1) {
+                            recortePdfPageNum = pageIndex + 1;
+                        }
 
                         if (bd) {
                             await adicionarFundo(doc, bd, W, H);
@@ -1425,10 +1448,54 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
                         // Renderiza os outros slots normalmente
                         remainingLines = await renderizarTextos(otherSlots, textMap, isCapa, fsMap, remainingLines);
+
                         pageIndex++;
                     } while (remainingLines && remainingLines.length > 0);
                 }
             }
+
+            // ── Recorte: pré-visualizar página renderizada e solicitar posicionamento ─
+            // Técnica: armazena o resolve de uma Promise em useState para pausar esta
+            // async fn enquanto o modal RecortePlacementModal está aberto. O modal
+            // chama onConfirm(pos) ou onCancel() → ambos resolvem a Promise aqui.
+            // Para desativar esta feature: remover este bloco + input em ConfiguracaoPage
+            // + deletar RecortePlacementModal.tsx.
+            if (recorteFile && recortePaginaNum !== null && isPageEnabled(recortePaginaNum, 0)) {
+                const prevBlob = doc.output('blob');
+                recortePreviewBlobUrl = URL.createObjectURL(prevBlob);
+                setRecortePreviewUrl(recortePreviewBlobUrl);
+                setRecortePhysicalPage(recortePdfPageNum);
+                setRecorteFileForModal(recorteFile);
+                const posResult = await new Promise<{ x: number; y: number; w: number; h: number } | null>(resolve => {
+                    setRecorteModalResolver(() => resolve);
+                    setShowRecorteModal(true);
+                });
+                setShowRecorteModal(false);
+                setRecorteFileForModal(null);
+                setRecorteModalResolver(null);
+                setRecortePreviewUrl(null);
+                setRecortePhysicalPage(null);
+                if (!posResult) {
+                    // Usuário cancelou o posicionamento — continua sem aplicar o recorte
+                    // (o PDF já está gerado, só pula a inserção da imagem de recorte)
+                }
+                // Aplica o recorte na página física correspondente (somente se o usuário confirmou)
+                if (posResult) {
+                    doc.setPage(recortePdfPageNum ?? recortePaginaNum);
+                    try {
+                        if (/\.svg$/i.test(recorteFile.name)) {
+                            const svgText = await recorteFile.text();
+                            const b64 = await rasterizarSvg(svgText, posResult.w, posResult.h);
+                            doc.addImage(b64, 'JPEG', posResult.x, posResult.y, posResult.w, posResult.h, undefined, 'FAST');
+                        } else {
+                            const { data, format } = await fileToBase64(recorteFile);
+                            doc.addImage(data, format, posResult.x, posResult.y, posResult.w, posResult.h, undefined, 'FAST');
+                        }
+                    } catch (recorteErr) {
+                        console.warn('[recorte] erro ao aplicar recorte no PDF:', recorteErr);
+                    }
+                }
+            } // fim if (recorteFile && recortePaginaNum !== null)
 
             setProgress('Finalizando...');
             const blob = doc.output('blob');
@@ -1436,8 +1503,9 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             // Remove acentos para evitar encoding corrompido no WhatsApp/Android
             const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             const nomeCliente = semAcento((b?.cliente ?? '').trim());
-            const nomeEvento  = semAcento((b?.evento ?? '').trim());
-            const numero      = (b?.numero ?? '').trim();
+            const nomeEvento = semAcento((b?.evento ?? '').trim());
+
+            const numero = (b?.numero ?? '').trim();
             const partes = [nomeCliente, nomeEvento, numero].filter(Boolean);
             const nome = partes.length > 0
                 ? `${partes.join(' - ')}.pdf`
@@ -1454,6 +1522,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
         } finally {
             // Libera Object URLs sempre — mesmo se geração falhar no meio
             renderUrls.forEach(url => URL.revokeObjectURL(url));
+            if (recortePreviewBlobUrl) URL.revokeObjectURL(recortePreviewBlobUrl);
             setGenerating(false);
         }
     }
@@ -1467,34 +1536,46 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
     // Modo auto-generate: overlay fixo sobre a página, sem navegar para cá
     if (autoGenerate) {
         return (
-            <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
-                {!pdfBlob ? (
-                    <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[280px] max-w-sm">
-                        {error ? (
-                            <>
-                                <span className="text-3xl">⚠️</span>
-                                <p className="text-xs text-red-600 text-center font-medium leading-relaxed">{error}</p>
-                                <button
-                                    onClick={() => { setError(''); onComplete?.(); }}
-                                    className="mt-1 text-sm bg-gray-800 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                                >
-                                    Fechar
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <svg className="animate-spin w-10 h-10 text-orange-500" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                                </svg>
-                                <p className="text-sm font-semibold text-gray-700">{progress || 'Gerando PDF...'}</p>
-                            </>
-                        )}
-                    </div>
-                ) : (
-                    <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => { setPdfBlob(null); onComplete?.(); }} />
+            <>
+                {showRecorteModal && recorteFileForModal && mascara && (
+                    <RecortePlacementModal
+                        recorteFile={recorteFileForModal}
+                        mascaraPdfUrl={mascara.url_mascara_pdf}
+                        pageNumber={recortePreviewUrl ? (recortePhysicalPage ?? recortePaginaNum ?? 1) : (recortePaginaNum ?? 1)}
+                        previewPdfUrl={recortePreviewUrl ?? undefined}
+                        onConfirm={(pos) => { recorteModalResolver?.(pos); }}
+                        onCancel={() => { recorteModalResolver?.(null); }}
+                    />
                 )}
-            </div>
+                <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
+                    {!pdfBlob ? (
+                        <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[280px] max-w-sm">
+                            {error ? (
+                                <>
+                                    <span className="text-3xl">⚠️</span>
+                                    <p className="text-xs text-red-600 text-center font-medium leading-relaxed">{error}</p>
+                                    <button
+                                        onClick={() => { setError(''); onComplete?.(); }}
+                                        className="mt-1 text-sm bg-gray-800 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                                    >
+                                        Fechar
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="animate-spin w-10 h-10 text-orange-500" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                    </svg>
+                                    <p className="text-sm font-semibold text-gray-700">{progress || 'Gerando PDF...'}</p>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => { setPdfBlob(null); onComplete?.(); }} />
+                    )}
+                </div>
+            </>
         );
     }
 
@@ -1721,6 +1802,17 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
             {pdfBlob && (
                 <PdfActionModal blob={pdfBlob} fileName={pdfName} onClose={() => { setPdfBlob(null); onComplete?.(); }} />
+            )}
+
+            {showRecorteModal && recorteFileForModal && mascara && (
+                <RecortePlacementModal
+                    recorteFile={recorteFileForModal}
+                    mascaraPdfUrl={mascara.url_mascara_pdf}
+                    pageNumber={recortePreviewUrl ? (recortePhysicalPage ?? recortePaginaNum ?? 1) : (recortePaginaNum ?? 1)}
+                    previewPdfUrl={recortePreviewUrl ?? undefined}
+                    onConfirm={(pos) => { recorteModalResolver?.(pos); }}
+                    onCancel={() => { recorteModalResolver?.(null); }}
+                />
             )}
         </div>
     );

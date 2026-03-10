@@ -19,6 +19,7 @@ const RE_BRIEFING  = /^\d{4,5}(\s*\(\d+\))?\.pdf$/i;  // 9182.pdf ou 9208 (2).pd
 const RE_PLANTA    = /^planta\.(png|jpg|jpeg|svg)$/i;
 const RE_LOGO      = /^logo\.(png|jpg|jpeg)$/i;
 const RE_TAMANHO   = /(\d+)[,.](\d+)\s*m/i;  // ex: "3,50m" ou "3.50m"
+const RE_RECORTE   = /^recorte\.(jpg|jpeg|png|svg)$/i;  // ex: recorte.jpg
 
 /**
  * Extrai o número de cópia do nome do arquivo.
@@ -67,6 +68,7 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
         memorial: null,
         tamanhoEstande: null,
         arquivoTamanho: null,
+        recorte: null,
     };
 
     // PDFs que não batem com RE_BRIEFING ficam aqui como fallback
@@ -86,6 +88,8 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
             resultado.planta = file;
         } else if (RE_LOGO.test(nome)) {
             resultado.logo = file;
+        } else if (RE_RECORTE.test(nome)) {
+            resultado.recorte = file;
         } else if (nome.endsWith('.txt')) {
             resultado.memorial = file;
         } else if (RE_TAMANHO.test(nome)) {
