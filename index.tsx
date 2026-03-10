@@ -17,6 +17,14 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 
+// Auto-reload quando o Service Worker atualizar (novo deploy)
+// Sem isso, usuários em produção ficam com a versão antiga em cache até fechar o browser.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+    });
+}
+
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error("Could not find root element");
 
