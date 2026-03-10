@@ -214,7 +214,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     const hasRestoredRef  = useRef(false); // guard para restaurar só uma vez por sessão
     const hasCenteredRef  = useRef(false); // guard para centralizar scroll só na primeira carga
     const fileInputRef    = useRef<HTMLInputElement>(null);
-    const panState        = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+    const panState        = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; lastX: number; lastY: number; rafId: number | null } | null>(null);
     useEffect(() => { arrowSizeMmRef.current  = arrowSizeMm;  }, [arrowSizeMm]);
     useEffect(() => { canvasDimsRef.current   = canvasDims;   }, [canvasDims]);
     useEffect(() => { placedArrowsRef.current = placedArrows; }, [placedArrows]);
@@ -275,20 +275,27 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         return () => el.removeEventListener('wheel', onWheel);
     }, []);
 
-    // Pan com botão do meio (scroll click) — mão ao arrastar, sem auto-scroll do browser
+    // Pan com botão do meio — um único rAF por frame (usa última posição do mouse)
     useEffect(() => {
         function onMouseMove(e: MouseEvent) {
-            if (!panState.current) return;
-            const el = scrollContainerRef.current;
-            if (!el) return;
-            requestAnimationFrame(() => {
-                if (!panState.current) return;
-                el.scrollLeft = panState.current.scrollLeft - (e.clientX - panState.current.startX);
-                el.scrollTop  = panState.current.scrollTop  - (e.clientY - panState.current.startY);
+            const p = panState.current;
+            if (!p) return;
+            p.lastX = e.clientX;
+            p.lastY = e.clientY;
+            if (p.rafId !== null) return; // já há um frame agendado
+            p.rafId = requestAnimationFrame(() => {
+                const p2 = panState.current;
+                if (!p2) return;
+                p2.rafId = null;
+                const el = scrollContainerRef.current;
+                if (!el) return;
+                el.scrollLeft = p2.scrollLeft - (p2.lastX - p2.startX);
+                el.scrollTop  = p2.scrollTop  - (p2.lastY - p2.startY);
             });
         }
         function onMouseUp(e: MouseEvent) {
             if (e.button !== 1) return;
+            if (panState.current?.rafId) cancelAnimationFrame(panState.current.rafId);
             panState.current = null;
             if (scrollContainerRef.current) scrollContainerRef.current.style.cursor = '';
         }
@@ -702,7 +709,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                         e.preventDefault(); // evita auto-scroll nativo do browser (setinha 4 direções)
                         const el = scrollContainerRef.current;
                         if (!el) return;
-                        panState.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+                        panState.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop, lastX: e.clientX, lastY: e.clientY, rafId: null };
                         el.style.cursor = 'grabbing';
                     }}
                     style={{ position: 'relative' }}
