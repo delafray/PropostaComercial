@@ -213,6 +213,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     const zoomRef         = useRef(1.0);
     const hasRestoredRef  = useRef(false); // guard para restaurar só uma vez por sessão
     const fileInputRef    = useRef<HTMLInputElement>(null);
+    const panState        = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
     useEffect(() => { arrowSizeMmRef.current  = arrowSizeMm;  }, [arrowSizeMm]);
     useEffect(() => { canvasDimsRef.current   = canvasDims;   }, [canvasDims]);
     useEffect(() => { placedArrowsRef.current = placedArrows; }, [placedArrows]);
@@ -259,6 +260,28 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         }
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
+    }, []);
+
+    // Pan com botão direito segurado — move o scroll container sem re-renders
+    useEffect(() => {
+        function onMouseMove(e: MouseEvent) {
+            if (!panState.current) return;
+            const el = scrollContainerRef.current;
+            if (!el) return;
+            el.scrollLeft = panState.current.scrollLeft - (e.clientX - panState.current.startX);
+            el.scrollTop  = panState.current.scrollTop  - (e.clientY - panState.current.startY);
+        }
+        function onMouseUp(e: MouseEvent) {
+            if (e.button !== 2) return;
+            panState.current = null;
+            if (scrollContainerRef.current) scrollContainerRef.current.style.cursor = '';
+        }
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup',   onMouseUp);
+        return () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup',   onMouseUp);
+        };
     }, []);
 
     // Refs para drag sem estado — zero re-renders durante o arrastar
@@ -658,6 +681,14 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                     className="flex-1 overflow-auto bg-gray-600 flex items-center justify-center p-4"
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleCanvasDrop}
+                    onContextMenu={e => e.preventDefault()}
+                    onMouseDown={e => {
+                        if (e.button !== 2) return;
+                        const el = scrollContainerRef.current;
+                        if (!el) return;
+                        panState.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+                        el.style.cursor = 'grabbing';
+                    }}
                     style={{ position: 'relative' }}
                 >
                     {/* Wrapper colapsa o espaço de layout com o zoom — transform sozinho não faz isso */}
