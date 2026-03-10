@@ -8,10 +8,11 @@ import { propostaService } from '../services/propostaService';
 import { TemplateMascara, TemplateBackdrop, PaginaConfig, SlotElemento, Proposta } from '../types';
 import PdfActionModal from './PdfActionModal';
 import RecortePlacementModal from './RecortePlacementModal';
+import SetasPlacementModal, { drawArrowToDoc, PlacedArrowResult } from './SetasPlacementModal';
 import { carregarHandle, pedirPermissao, lerArquivos, suportaFSA } from '../utils/pastaHandle';
 import { prefService } from '../services/prefService';
 import { supabase } from '../../../../services/supabaseClient';
-import { SlotDefaults, prefKeyForMascara, prefKeyForRecorte } from './ConfiguracaoPage';
+import { SlotDefaults, prefKeyForMascara, prefKeyForRecorte, prefKeyForSetas } from './ConfiguracaoPage';
 import { registrarFontes, normalizarFamilia, renderTextoVetor, renderTextoVetorJustify, wrapTextoMm, carregarFonteVetor, preprocessarSvg, inlinearCssSvg, normalizarImagensSvg } from '../utils/fontLoader';
 import { parseBriefingPdf } from '../utils/briefingParser';
 import { getMaquinaId } from '../utils/maquinaId';
@@ -521,6 +522,12 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
     const [recortePreviewUrl, setRecortePreviewUrl] = useState<string | null>(null);
     const [recortePhysicalPage, setRecortePhysicalPage] = useState<number | null>(null);
 
+    const [setasPaginaNum, setSetasPaginaNum] = useState<number | null>(null);
+    const [showSetasModal, setShowSetasModal] = useState(false);
+    const [setasModalResolver, setSetasModalResolver] = useState<((arrows: PlacedArrowResult[]) => void) | null>(null);
+    const [setasPreviewBlob, setSetasPreviewBlob] = useState<Blob | null>(null);
+    const [setasPhysicalPage, setSetasPhysicalPage] = useState<number | null>(null);
+
     useEffect(() => { loadData(); }, []);
     // Quando autoGenerate=true, dispara gerarPdf assim que o loading terminar
     useEffect(() => { if (autoGenerate && !loading && !generating && !pdfBlob) { gerarPdf(); } }, [loading]);
@@ -551,12 +558,14 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
             setProposta(propostaAtual);
 
             if (mc) {
-                const [savedDefs, savedRecortePag] = await Promise.all([
+                const [savedDefs, savedRecortePag, savedSetasPag] = await Promise.all([
                     prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null),
                     prefService.loadPref(prefKeyForRecorte(mc.id)).catch(() => null),
+                    prefService.loadPref(prefKeyForSetas(mc.id)).catch(() => null),
                 ]);
                 setSlotDefaults((savedDefs as SlotDefaults) ?? {});
                 setRecortePaginaNum(savedRecortePag != null ? Number(savedRecortePag) : null);
+                setSetasPaginaNum(savedSetasPag != null ? Number(savedSetasPag) : null);
             }
 
             if (handle) {
@@ -1193,6 +1202,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
 
             let pageIndex = 0;
             let recortePdfPageNum: number | null = null; // página física (1-based) da cfgPagina do recorte
+            let setasPdfPageNum:  number | null = null; // idem para setas
 
             // ── Loop Unificado de Páginas ──────────────────────────────────────
 
@@ -1282,9 +1292,12 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         }
                         setProgress(`Gerando ${cfgPagina.descricao || `Página ${cfgPagina.pagina}`}${projetoSlot && timesToRepeat > 1 ? ` (${ri + 1}/${timesToRepeat})` : ''}...`);
                         if (pageIndex > 0) doc.addPage();
-                        // Captura a página física real desta cfgPagina para o recorte
+                        // Captura a página física real desta cfgPagina para o recorte e setas
                         if (cfgPagina.pagina === recortePaginaNum && ri === 0 && overflowGuard === 1) {
                             recortePdfPageNum = pageIndex + 1;
+                        }
+                        if (cfgPagina.pagina === setasPaginaNum && ri === 0 && overflowGuard === 1) {
+                            setasPdfPageNum = pageIndex + 1;
                         }
 
                         if (bd) {
@@ -1497,6 +1510,31 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 }
             } // fim if (recorteFile && recortePaginaNum !== null)
 
+            // ── Setas: abrir modal interativo e aplicar no PDF ──────────────────
+            // Mesmo padrão do recorte: pausa via Promise + resolver em useState.
+            // Para desativar: remover este bloco + campo em ConfiguracaoPage + deletar SetasPlacementModal.tsx
+            if (setasPaginaNum !== null && isPageEnabled(setasPaginaNum, 0)) {
+                const prevBlob = doc.output('blob');
+                setSetasPreviewBlob(prevBlob);
+                setSetasPhysicalPage(setasPdfPageNum); // página física rastreada no loop
+                const arrows = await new Promise<PlacedArrowResult[]>(resolve => {
+                    setSetasModalResolver(() => resolve);
+                    setShowSetasModal(true);
+                });
+                setShowSetasModal(false);
+                setSetasModalResolver(null);
+                setSetasPreviewBlob(null);
+
+                doc.setPage(setasPdfPageNum ?? setasPaginaNum);
+                for (const arrow of arrows) {
+                    try {
+                        drawArrowToDoc(doc, arrow); // vetor direto — sem fundo branco
+                    } catch (e) {
+                        console.warn('[setas] erro ao aplicar seta:', e);
+                    }
+                }
+            } // fim if (setasPaginaNum !== null)
+
             setProgress('Finalizando...');
             const blob = doc.output('blob');
             const b = localBriefing;
@@ -1545,6 +1583,14 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         previewPdfUrl={recortePreviewUrl ?? undefined}
                         onConfirm={(pos) => { recorteModalResolver?.(pos); }}
                         onCancel={() => { recorteModalResolver?.(null); }}
+                    />
+                )}
+                {showSetasModal && setasPreviewBlob && (
+                    <SetasPlacementModal
+                        pdfBlob={setasPreviewBlob}
+                        pageNumber={setasPhysicalPage ?? setasPaginaNum ?? 1}
+                        onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
+                        onCancel={() => { setasModalResolver?.([]); }}
                     />
                 )}
                 <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
@@ -1812,6 +1858,14 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     previewPdfUrl={recortePreviewUrl ?? undefined}
                     onConfirm={(pos) => { recorteModalResolver?.(pos); }}
                     onCancel={() => { recorteModalResolver?.(null); }}
+                />
+            )}
+            {showSetasModal && setasPreviewBlob && (
+                <SetasPlacementModal
+                    pdfBlob={setasPreviewBlob}
+                    pageNumber={setasPaginaNum ?? 1}
+                    onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
+                    onCancel={() => { setasModalResolver?.([]); }}
                 />
             )}
         </div>

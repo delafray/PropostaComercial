@@ -11,6 +11,23 @@ Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Fix: sistema de página (recorte + setas) — página do sistema ≠ página física do PDF**
+- **Regra:** campos "Página do Recorte" e "Página das Setas" em ConfiguracaoPage armazenam o número de página **do sistema** (cfgPagina.pagina), NÃO a página física do PDF gerado.
+- **Causa do bug:** páginas desabilitadas (isPageEnabled=false) ou múltiplas repetições (renders) fazem com que a página física ≠ página do sistema.
+- **Solução (padrão aplicado a ambos):** variável local `recortePdfPageNum` / `setasPdfPageNum` rastreada no loop principal — captura `pageIndex + 1` quando `cfgPagina.pagina === paginaNum && ri === 0 && overflowGuard === 1`. Depois: `doc.setPage(pdfPageNum ?? paginaNum)` e `pageNumber={physicalPage ?? paginaNum ?? 1}` no modal.
+- **State de bridge:** `recortePhysicalPage` / `setasPhysicalPage` — necessário porque o loop é async dentro de `gerarPdf()` mas o modal é renderizado no JSX fora dela.
+- **Arquivos:** `GerarPdfPage.tsx` — declaração das vars + tracking no loop + `setSetasPhysicalPage()` antes de abrir modal + `doc.setPage()` + `pageNumber` do modal.
+
+## ✅ TAREFA ANTERIOR
+**Feature "Setas Apontadoras" — painel interativo de setas direcionais no PDF**
+- `SetasPlacementModal.tsx` (NOVO): paleta esquerda (A01→L04 × 4 direções), canvas direita (página pdf.js), scale slider (5-40mm), drag paleta→canvas, drag canvas→reposicionar, arrastar pra fora da página=remove, Confirmar/Cancelar
+- `ConfiguracaoPage.tsx`: `prefKeyForSetas()`, estado `setasPage`, input "Página das Setas", salva/carrega pref `setas_page_${mascaraId}`
+- `GerarPdfPage.tsx`: import `SetasPlacementModal`+`generateArrowSvg`+`PlacedArrowResult`+`prefKeyForSetas`; estados `setasPaginaNum/showSetasModal/setasModalResolver/setasPreviewBlob`; carrega pref em `loadData`; bloco após recorte: pausa PDF → abre modal → aplica setas via `rasterizarSvg`+`doc.addImage`; renderiza modal em modo auto e standalone
+- **Para desativar:** remover bloco setas em GerarPdfPage + campo em ConfiguracaoPage + deletar SetasPlacementModal.tsx
+- **SVG shapes:** right/left=viewBox 120×50, up/down=viewBox 50×120; corpo magenta #B5479A + triângulo
+- **Sem persistência de posições** — usuário posiciona do zero a cada geração
+
+## ✅ TAREFA ANTERIOR
 **Fix: página de overflow (planta baixa) não preenchia slots de footer/header**
 - `GerarPdfPage.tsx` linha 1131: `linesOverride && slotDef?.scriptName !== '01'` → `linesOverride && slotDef?.scriptName && slotDef.scriptName !== '01'`
 - Causa: guard antigo pulava todos os slots (inclusive texto puro/footer) quando `linesOverride` estava setado; só `01` passava

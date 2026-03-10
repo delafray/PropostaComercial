@@ -30,6 +30,10 @@ export function prefKeyForRecorte(mascaraId: string) {
     return `recorte_page_${mascaraId}`;
 }
 
+export function prefKeyForSetas(mascaraId: string) {
+    return `setas_page_${mascaraId}`;
+}
+
 // ── Constantes ─────────────────────────────────────────────────────────────────
 
 const FONTS = [
@@ -145,6 +149,7 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
     const [error, setError] = useState('');
     const [defaults, setDefaults] = useState<SlotDefaults>({});
     const [recortePage, setRecortePage] = useState<string>('');
+    const [setasPage, setSetasPage] = useState<string>('');
     const touchedRef = React.useRef(false);
 
     useEffect(() => { loadData(); }, [mascaraId]);
@@ -158,11 +163,13 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
                 : mascaras[0] ?? null;
             setMascara(mc);
             if (mc) {
-                const [savedData, savedRecortePag] = await Promise.all([
+                const [savedData, savedRecortePag, savedSetasPag] = await Promise.all([
                     prefService.loadPref(prefKeyForMascara(mc.id)).catch(() => null),
                     prefService.loadPref(prefKeyForRecorte(mc.id)).catch(() => null),
+                    prefService.loadPref(prefKeyForSetas(mc.id)).catch(() => null),
                 ]);
                 setRecortePage(savedRecortePag != null ? String(savedRecortePag) : '');
+                setSetasPage(savedSetasPag != null ? String(savedSetasPag) : '');
                 const savedDefaults = (savedData as SlotDefaults) ?? {};
                 const init: SlotDefaults = {};
                 for (const pagina of mc.paginas_config) {
@@ -206,9 +213,11 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
         setError('');
         try {
             const recortePageNum = recortePage !== '' ? Number(recortePage) : null;
+            const setasPageNum = setasPage !== '' ? Number(setasPage) : null;
             await Promise.all([
                 prefService.savePref(prefKeyForMascara(mascara.id), defaults),
                 prefService.savePref(prefKeyForRecorte(mascara.id), recortePageNum),
+                prefService.savePref(prefKeyForSetas(mascara.id), setasPageNum),
             ]);
             setSaved(true);
             touchedRef.current = false;
@@ -305,6 +314,48 @@ export default function ConfiguracaoPage({ mascaraId, onDirtyChange }: { mascara
                             <button
                                 type="button"
                                 onClick={() => { setRecortePage(''); if (!touchedRef.current) { touchedRef.current = true; onDirtyChange?.('Configuração', true); } }}
+                                className="text-gray-400 hover:text-red-500 transition-colors text-sm"
+                                title="Limpar"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Configuração de Setas Apontadoras ─────────────────────────── */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-2">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center shrink-0">
+                        <span className="text-pink-600 text-sm">↗</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-800">Página das Setas</p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                            Abre um painel interativo nesta página para posicionar setas apontadoras (A01→L04).
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                            type="number"
+                            min={1}
+                            max={99}
+                            value={setasPage}
+                            onChange={e => {
+                                setSetasPage(e.target.value);
+                                if (!touchedRef.current) {
+                                    touchedRef.current = true;
+                                    onDirtyChange?.('Configuração', true);
+                                }
+                            }}
+                            placeholder="—"
+                            className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center font-mono focus:outline-none focus:border-pink-400"
+                        />
+                        {setasPage && (
+                            <button
+                                type="button"
+                                onClick={() => { setSetasPage(''); if (!touchedRef.current) { touchedRef.current = true; onDirtyChange?.('Configuração', true); } }}
                                 className="text-gray-400 hover:text-red-500 transition-colors text-sm"
                                 title="Limpar"
                             >
