@@ -275,7 +275,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         return () => el.removeEventListener('wheel', onWheel);
     }, []);
 
-    // Pan com botão direito segurado — move o scroll container sem re-renders
+    // Pan com botão do meio (scroll click) — mão ao arrastar, sem auto-scroll do browser
     useEffect(() => {
         function onMouseMove(e: MouseEvent) {
             if (!panState.current) return;
@@ -285,9 +285,9 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
             el.scrollTop  = panState.current.scrollTop  - (e.clientY - panState.current.startY);
         }
         function onMouseUp(e: MouseEvent) {
-            if (e.button !== 2) return;
+            if (e.button !== 1) return;
             panState.current = null;
-            if (scrollContainerRef.current) scrollContainerRef.current.style.cursor = '';
+            if (scrollContainerRef.current) scrollContainerRef.current.style.cursor = 'grab';
         }
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup',   onMouseUp);
@@ -694,15 +694,15 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                     className="flex-1 overflow-auto bg-gray-600"
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleCanvasDrop}
-                    onContextMenu={e => e.preventDefault()}
                     onMouseDown={e => {
-                        if (e.button !== 2) return;
+                        if (e.button !== 1) return; // botão do meio
+                        e.preventDefault(); // evita auto-scroll nativo do browser (setinha 4 direções)
                         const el = scrollContainerRef.current;
                         if (!el) return;
                         panState.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
                         el.style.cursor = 'grabbing';
                     }}
-                    style={{ position: 'relative' }}
+                    style={{ position: 'relative', cursor: 'grab' }}
                 >
                     {/* Stage — garante espaço de scroll em todas as direções (pan livre) */}
                     <div style={{
