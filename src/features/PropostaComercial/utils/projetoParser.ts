@@ -90,7 +90,7 @@ export function parsePasta(files: FileList | File[]): ProjetoInput {
             resultado.logo = file;
         } else if (RE_RECORTE.test(nome)) {
             resultado.recorte = file;
-        } else if (nome.endsWith('.txt')) {
+        } else if (nome.endsWith('.txt') && !nome.startsWith('Art Guide')) {
             resultado.memorial = file;
         } else if (RE_TAMANHO.test(nome)) {
             resultado.tamanhoEstande = extrairTamanho(nome);
