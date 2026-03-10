@@ -10,6 +10,31 @@ Isso inclui `H:\PROJETOS\` e qualquer outro drive ou diretório da máquina.
 Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
+## 🔮 FEATURE PLANEJADA — Edição de Slots da Máscara
+**Status:** aguardando regras do usuário. NÃO implementar sem elas.
+
+O usuário quer poder **editar slots individualmente** diretamente na interface — sem precisar recriar o PDF de máscara no CorelDraw.
+
+**Operações desejadas (confirmadas):**
+- Aumentar / diminuir um slot
+- Rotacionar um slot
+
+**Regras de negócio:** a definir pelo usuário antes de codificar.
+**Perguntas em aberto:**
+- As alterações são salvas por máscara? por projeto? globalmente?
+- Rotação é livre (qualquer ângulo) ou em steps (90°, 45°)?
+- Slots editados substituem o slot original ou são sobrepostos como "override"?
+- Há limite mínimo/máximo de tamanho?
+- O slot editado afeta apenas o posicionamento da imagem ou também o shape visual?
+
+**Arquivos prováveis de impacto:**
+- `utils/mascaraParser.ts` — estrutura do slot precisará de campos extras (rotation, scaleX, scaleY)
+- `types/index.ts` — interface `Slot` ou `SlotConfig`
+- `components/MascarasPage.tsx` — UI de edição
+- `supabase/migrations/` — nova coluna ou tabela para persistir overrides
+
+---
+
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
 **Navegação avançada no SetasPlacementModal: pan + zoom toward cursor + save/load**
 - **localStorage persistence:** `storageKey = setas_placement_${mascaraId}_p${page}_${pastaHandle.name}` — invalida se trocar pasta
