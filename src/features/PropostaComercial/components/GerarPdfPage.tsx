@@ -1592,6 +1592,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
                         onCancel={() => { setasModalResolver?.([]); }}
                         storageKey={mascara?.id && pastaHandle?.name ? `setas_placement_${mascara.id}_p${setasPaginaNum}_${pastaHandle.name}` : undefined}
+                        fileNameHint={(() => { const b = proposta?.dados?.briefing; return b ? `Art Guide - ${b.cliente ?? 'cliente'} - ${b.evento ?? 'evento'} - ${b.numero ?? 'numero'}` : 'Art Guide'; })()}
                     />
                 )}
                 <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
@@ -1868,6 +1869,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
                     onCancel={() => { setasModalResolver?.([]); }}
                     storageKey={mascara?.id && pastaHandle?.name ? `setas_placement_${mascara.id}_p${setasPaginaNum}_${pastaHandle.name}` : undefined}
+                    fileNameHint={(() => { const b = proposta?.dados?.briefing; return b ? `Art Guide - ${b.cliente ?? 'cliente'} - ${b.evento ?? 'evento'} - ${b.numero ?? 'numero'}` : 'Art Guide'; })()}
                 />
             )}
         </div>

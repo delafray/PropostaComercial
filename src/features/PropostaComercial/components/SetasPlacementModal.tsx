@@ -50,6 +50,7 @@ interface Props {
     onConfirm: (arrows: PlacedArrowResult[]) => void;
     onCancel: () => void;
     storageKey?: string;
+    fileNameHint?: string; // ex: "Art Guide - Cliente - Evento - Numero"
 }
 
 interface SavedSetasState {
@@ -192,7 +193,7 @@ export function drawArrowToDoc(doc: any, arrow: PlacedArrowResult): void {
     doc.setTextColor(0, 0, 0); // restaura cor padrão
 }
 
-export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, onCancel, storageKey }: Props) {
+export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, onCancel, storageKey, fileNameHint }: Props) {
     const canvasRef    = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [canvasDims, setCanvasDims]     = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -211,6 +212,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     const fontSizePtRef   = useRef(18);
     const zoomRef         = useRef(1.0);
     const hasRestoredRef  = useRef(false); // guard para restaurar só uma vez por sessão
+    const fileInputRef    = useRef<HTMLInputElement>(null);
     useEffect(() => { arrowSizeMmRef.current  = arrowSizeMm;  }, [arrowSizeMm]);
     useEffect(() => { canvasDimsRef.current   = canvasDims;   }, [canvasDims]);
     useEffect(() => { placedArrowsRef.current = placedArrows; }, [placedArrows]);
@@ -481,6 +483,64 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         onConfirm(results);
     }
 
+    /** Converte setas atuais (px) → mm e retorna SavedSetasState */
+    function buildSavedState(): SavedSetasState {
+        const cd = canvasDimsRef.current;
+        const arrows: PlacedArrowResult[] = [];
+        for (const arrow of placedArrowsRef.current) {
+            if (!cd.w || arrow.cx < 0 || arrow.cx > cd.w || arrow.cy < 0 || arrow.cy > cd.h) continue;
+            const dims = arrowPxDims(arrow.direction);
+            arrows.push({
+                code:      arrow.code,
+                direction: arrow.direction,
+                x: ((arrow.cx - dims.w / 2) / cd.w) * PAGE_W_MM,
+                y: ((arrow.cy - dims.h / 2) / cd.h) * PAGE_H_MM,
+                w: (dims.w / cd.w) * PAGE_W_MM,
+                h: (dims.h / cd.h) * PAGE_H_MM,
+                fontSizePt: fontSizePtRef.current,
+            });
+        }
+        return { arrows, arrowSizeMm: arrowSizeMmRef.current, fontSizePt: fontSizePtRef.current };
+    }
+
+    function handleSaveFile() {
+        const state = buildSavedState();
+        const json  = JSON.stringify(state, null, 2);
+        const blob  = new Blob([json], { type: 'text/plain;charset=utf-8' });
+        const url   = URL.createObjectURL(blob);
+        const a     = document.createElement('a');
+        a.href      = url;
+        a.download  = `${fileNameHint ?? 'Art Guide'}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function handleLoadFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = ''; // reset para permitir recarregar o mesmo arquivo
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const saved: SavedSetasState = JSON.parse(reader.result as string);
+                if (!Array.isArray(saved.arrows)) return;
+                const cd = canvasDimsRef.current;
+                if (!cd.w) return;
+                const restored: PlacedArrow[] = saved.arrows.map(r => ({
+                    id:        crypto.randomUUID(),
+                    code:      r.code,
+                    direction: r.direction,
+                    cx: (r.x + r.w / 2) / PAGE_W_MM * cd.w,
+                    cy: (r.y + r.h / 2) / PAGE_H_MM * cd.h,
+                }));
+                setPlacedArrows(restored);
+                if (typeof saved.arrowSizeMm === 'number') setArrowSizeMm(saved.arrowSizeMm);
+                if (typeof saved.fontSizePt  === 'number') setFontSizePt(saved.fontSizePt);
+            } catch { /* arquivo inválido */ }
+        };
+        reader.readAsText(file);
+    }
+
     return (
         <div className="fixed inset-0 z-[300] flex flex-col bg-gray-900" style={{ userSelect: 'none' }}>
 
@@ -521,6 +581,23 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 <span className="text-gray-300 text-xs font-mono tabular-nums w-4 text-center">{maxNumber}</span>
                 <button onClick={() => setMaxNumber(v => Math.min(9, v + 1))}
                     className="w-6 h-6 rounded bg-gray-600 text-white text-sm hover:bg-gray-500 flex items-center justify-center">+</button>
+
+                <div className="w-px h-4 bg-gray-600 mx-1" />
+
+                {/* Salvar / Carregar guia */}
+                <button onClick={handleSaveFile} disabled={loadingPdf}
+                    title={`Salvar guia: ${fileNameHint ?? 'Art Guide'}.txt`}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white disabled:opacity-40 transition-colors">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4.5L10.5 1H2zm8 0v3.5H13L10 1zM4 9h8v1H4zm0 2h8v1H4zm0-4h4v1H4z"/></svg>
+                    Salvar
+                </button>
+                <button onClick={() => fileInputRef.current?.click()} disabled={loadingPdf}
+                    title="Carregar guia salvo (.txt)"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white disabled:opacity-40 transition-colors">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 2a.5.5 0 0 1 .5.5v5.793l1.646-1.647a.5.5 0 0 1 .708.708l-2.5 2.5a.5.5 0 0 1-.708 0l-2.5-2.5a.5.5 0 1 1 .708-.708L7.5 8.293V2.5A.5.5 0 0 1 8 2zm-5 9a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1a1 1 0 0 0-1-1H3z"/></svg>
+                    Carregar
+                </button>
+                <input ref={fileInputRef} type="file" accept=".txt" style={{ display: 'none' }} onChange={handleLoadFile} />
 
                 <div className="flex-1" />
                 <div className="w-px h-4 bg-gray-600 mx-1" />
