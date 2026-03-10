@@ -11,14 +11,15 @@ Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
-**localStorage persistence para placement de setas**
-- `storageKey?: string` adicionado à interface Props de SetasPlacementModal
-- `SavedSetasState` = `{ arrows: PlacedArrowResult[], arrowSizeMm, fontSizePt }`
-- `handleConfirm` salva estado em `localStorage.setItem(storageKey, JSON.stringify(saved))`
-- `useEffect([storageKey, canvasDims.w])` restaura após canvas pronto — `hasRestoredRef` impede dupla restauração
-- Restauração: `cx = (r.x + r.w/2) / PAGE_W_MM * cd.w`, `cy = (r.y + r.h/2) / PAGE_H_MM * cd.h`
-- Chave passada em ambos os renders em GerarPdfPage: `setas_placement_${mascara.id}_p${setasPaginaNum}`
-- Persiste por máscara+página — invalida automaticamente se o usuário mudar de máscara ou página
+**Navegação avançada no SetasPlacementModal: pan + zoom toward cursor + save/load**
+- **localStorage persistence:** `storageKey = setas_placement_${mascaraId}_p${page}_${pastaHandle.name}` — invalida se trocar pasta
+- **Save/Load arquivo:** botões "Salvar"/"Carregar" exportam/importam `.txt` nomeado `Art Guide - Cliente - Evento - Numero.txt`; `setasFileNameHint` state em GerarPdfPage setado de `localBriefing` antes de abrir modal
+- **projetoParser fix:** ignora txt que começam com `Art Guide` ao detectar memorial
+- **Stage div:** `minWidth/minHeight = pdfDim * zoom + 600` garante scroll em todas as direções; flex centra o conteúdo
+- **Centralização ao carregar:** `useEffect([canvasDims.w])` com `hasCenteredRef` — `scrollLeft/Top = (scrollWidth/Height - clientWidth/Height) / 2`
+- **Middle-click pan:** `onMouseDown button===1` + `e.preventDefault()` (cancela setinha nativa); cursor `grabbing` durante, `''` ao soltar; `panState.current = { startX, startY, scrollLeft, scrollTop, lastX, lastY, rafId }`
+- **Pan suave:** rAF único por frame — `lastX/lastY` atualizam a cada `mousemove`; rAF lê último valor; `scrollLeft = startScroll - (lastX - startX)`
+- **Zoom toward cursor:** `postZoomScroll` ref + `useEffect([zoom])` aplica scroll em rAF. Fórmula: `canvasOffX + canvasLocalX * newZoom - mouseX` onde `canvasLocalX = (clientX - canvasRect.left) / oldZoom` e `canvasOffX = (max(cd.w*newZoom+600, el.clientWidth) - cd.w*newZoom) / 2`. Fórmula errada anterior `(scrollLeft+mouseX)*ratio - mouseX` ignorava offset do canvas no scroll content.
 
 ## ✅ TAREFA ANTERIOR
 **Refinamentos visuais do texto nas setas (SetasPlacementModal)**

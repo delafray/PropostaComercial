@@ -215,6 +215,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     const hasCenteredRef  = useRef(false); // guard para centralizar scroll só na primeira carga
     const fileInputRef    = useRef<HTMLInputElement>(null);
     const panState        = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; lastX: number; lastY: number; rafId: number | null } | null>(null);
+    const postZoomScroll  = useRef<{ scrollLeft: number; scrollTop: number } | null>(null);
     useEffect(() => { arrowSizeMmRef.current  = arrowSizeMm;  }, [arrowSizeMm]);
     useEffect(() => { canvasDimsRef.current   = canvasDims;   }, [canvasDims]);
     useEffect(() => { placedArrowsRef.current = placedArrows; }, [placedArrows]);
@@ -246,6 +247,19 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         }
     }, [storageKey, canvasDims.w]);
 
+    // Aplica scroll pós-zoom para manter o ponto sob o mouse fixo
+    useEffect(() => {
+        if (!postZoomScroll.current) return;
+        const { scrollLeft, scrollTop } = postZoomScroll.current;
+        postZoomScroll.current = null;
+        requestAnimationFrame(() => {
+            const el = scrollContainerRef.current;
+            if (!el) return;
+            el.scrollLeft = scrollLeft;
+            el.scrollTop  = scrollTop;
+        });
+    }, [zoom]);
+
     // Centraliza o scroll quando o PDF carrega pela primeira vez
     useEffect(() => {
         if (!canvasDims.w || hasCenteredRef.current) return;
@@ -268,8 +282,30 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         if (!el) return;
         function onWheel(e: WheelEvent) {
             e.preventDefault();
-            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-            setZoom(v => Math.min(4, Math.max(0.3, v * factor)));
+            const factor  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            const oldZoom = zoomRef.current;
+            const newZoom = Math.min(4, Math.max(0.3, oldZoom * factor));
+            const cd      = canvasDimsRef.current;
+            const elRect  = el.getBoundingClientRect();
+            const mouseX  = e.clientX - elRect.left;
+            const mouseY  = e.clientY - elRect.top;
+            if (cd.w && containerRef.current) {
+                // Ponto no canvas (em pixels não-escalados) sob o cursor
+                const canvasRect   = containerRef.current.getBoundingClientRect();
+                const canvasLocalX = (e.clientX - canvasRect.left) / oldZoom;
+                const canvasLocalY = (e.clientY - canvasRect.top)  / oldZoom;
+                // Posição do canvas dentro do scroll content APÓS o zoom
+                // (stage: minWidth = cd.w * newZoom + 600; canvas centralizado dentro)
+                const stageW    = Math.max(cd.w * newZoom + 600, el.clientWidth);
+                const stageH    = Math.max(cd.h * newZoom + 600, el.clientHeight);
+                const canvasOffX = (stageW - cd.w * newZoom) / 2;
+                const canvasOffY = (stageH - cd.h * newZoom) / 2;
+                postZoomScroll.current = {
+                    scrollLeft: canvasOffX + canvasLocalX * newZoom - mouseX,
+                    scrollTop:  canvasOffY + canvasLocalY * newZoom - mouseY,
+                };
+            }
+            setZoom(newZoom);
         }
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
