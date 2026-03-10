@@ -527,6 +527,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
     const [setasModalResolver, setSetasModalResolver] = useState<((arrows: PlacedArrowResult[]) => void) | null>(null);
     const [setasPreviewBlob, setSetasPreviewBlob] = useState<Blob | null>(null);
     const [setasPhysicalPage, setSetasPhysicalPage] = useState<number | null>(null);
+    const [setasFileNameHint, setSetasFileNameHint] = useState<string>('Art Guide');
 
     useEffect(() => { loadData(); }, []);
     // Quando autoGenerate=true, dispara gerarPdf assim que o loading terminar
@@ -1517,6 +1518,8 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 const prevBlob = doc.output('blob');
                 setSetasPreviewBlob(prevBlob);
                 setSetasPhysicalPage(setasPdfPageNum); // página física rastreada no loop
+                const _b = localBriefing;
+                setSetasFileNameHint(_b ? `Art Guide - ${_b.cliente ?? 'cliente'} - ${_b.evento ?? 'evento'} - ${_b.numero ?? 'numero'}` : 'Art Guide');
                 const arrows = await new Promise<PlacedArrowResult[]>(resolve => {
                     setSetasModalResolver(() => resolve);
                     setShowSetasModal(true);
@@ -1592,7 +1595,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
                         onCancel={() => { setasModalResolver?.([]); }}
                         storageKey={mascara?.id && pastaHandle?.name ? `setas_placement_${mascara.id}_p${setasPaginaNum}_${pastaHandle.name}` : undefined}
-                        fileNameHint={(() => { const b = proposta?.dados?.briefing; return b ? `Art Guide - ${b.cliente ?? 'cliente'} - ${b.evento ?? 'evento'} - ${b.numero ?? 'numero'}` : 'Art Guide'; })()}
+                        fileNameHint={setasFileNameHint}
                     />
                 )}
                 <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
