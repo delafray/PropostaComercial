@@ -281,13 +281,16 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
             if (!panState.current) return;
             const el = scrollContainerRef.current;
             if (!el) return;
-            el.scrollLeft = panState.current.scrollLeft - (e.clientX - panState.current.startX);
-            el.scrollTop  = panState.current.scrollTop  - (e.clientY - panState.current.startY);
+            requestAnimationFrame(() => {
+                if (!panState.current) return;
+                el.scrollLeft = panState.current.scrollLeft - (e.clientX - panState.current.startX);
+                el.scrollTop  = panState.current.scrollTop  - (e.clientY - panState.current.startY);
+            });
         }
         function onMouseUp(e: MouseEvent) {
             if (e.button !== 1) return;
             panState.current = null;
-            if (scrollContainerRef.current) scrollContainerRef.current.style.cursor = 'grab';
+            if (scrollContainerRef.current) scrollContainerRef.current.style.cursor = '';
         }
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup',   onMouseUp);
@@ -702,7 +705,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                         panState.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
                         el.style.cursor = 'grabbing';
                     }}
-                    style={{ position: 'relative', cursor: 'grab' }}
+                    style={{ position: 'relative' }}
                 >
                     {/* Stage — garante espaço de scroll em todas as direções (pan livre) */}
                     <div style={{
