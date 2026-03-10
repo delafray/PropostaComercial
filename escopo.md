@@ -11,6 +11,25 @@ Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
 ## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**localStorage persistence para placement de setas**
+- `storageKey?: string` adicionado à interface Props de SetasPlacementModal
+- `SavedSetasState` = `{ arrows: PlacedArrowResult[], arrowSizeMm, fontSizePt }`
+- `handleConfirm` salva estado em `localStorage.setItem(storageKey, JSON.stringify(saved))`
+- `useEffect([storageKey, canvasDims.w])` restaura após canvas pronto — `hasRestoredRef` impede dupla restauração
+- Restauração: `cx = (r.x + r.w/2) / PAGE_W_MM * cd.w`, `cy = (r.y + r.h/2) / PAGE_H_MM * cd.h`
+- Chave passada em ambos os renders em GerarPdfPage: `setas_placement_${mascara.id}_p${setasPaginaNum}`
+- Persiste por máscara+página — invalida automaticamente se o usuário mudar de máscara ou página
+
+## ✅ TAREFA ANTERIOR
+**Refinamentos visuais do texto nas setas (SetasPlacementModal)**
+- `letter-spacing="0.4"` no SVG para respiração entre letra e número (ex: A01 → A·01)
+- `halfW` corrigido para incluir espaçamento: `code.length * fsNum * 0.31 + (code.length-1) * ls/2` — back-margin clamp funciona mesmo com ls
+- Offset em direção à ponta: `+1.5u` para left/up/down; `+1.5u` para right (clamp back-margin já empurra automaticamente)
+- UP/DOWN: sem back-clamping, texto centralizado no corpo — tiny overflow (~0.26mm) clipado pelo SVG
+- Paleta range dinâmico: padrão A→D / 1→3; controles +/− no top bar (letra até Z, qtd até 9)
+- Ajuste fino por teclado: Arrow keys = 1px, Shift+Arrow = 10px; nova seta arrastada já fica selecionada
+
+## ✅ TAREFA ANTERIOR
 **Fix: sistema de página (recorte + setas) — página do sistema ≠ página física do PDF**
 - **Regra:** campos "Página do Recorte" e "Página das Setas" em ConfiguracaoPage armazenam o número de página **do sistema** (cfgPagina.pagina), NÃO a página física do PDF gerado.
 - **Causa do bug:** páginas desabilitadas (isPageEnabled=false) ou múltiplas repetições (renders) fazem com que a página física ≠ página do sistema.

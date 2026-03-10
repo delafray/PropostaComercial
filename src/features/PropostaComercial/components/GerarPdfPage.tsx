@@ -1591,6 +1591,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                         pageNumber={setasPhysicalPage ?? setasPaginaNum ?? 1}
                         onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
                         onCancel={() => { setasModalResolver?.([]); }}
+                        storageKey={mascara?.id ? `setas_placement_${mascara.id}_p${setasPaginaNum}` : undefined}
                     />
                 )}
                 <div className="fixed inset-0 z-[200] bg-black/50 flex items-center justify-center">
@@ -1866,6 +1867,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                     pageNumber={setasPaginaNum ?? 1}
                     onConfirm={(arrows) => { setasModalResolver?.(arrows); }}
                     onCancel={() => { setasModalResolver?.([]); }}
+                    storageKey={mascara?.id ? `setas_placement_${mascara.id}_p${setasPaginaNum}` : undefined}
                 />
             )}
         </div>

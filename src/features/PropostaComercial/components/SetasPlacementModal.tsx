@@ -20,8 +20,8 @@ const BODY_W  = 8.43;
 const TIP     = TOTAL_W / 2;
 const ARROW_COLOR = '#A8518A';
 
-const LETTERS   = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-const NUMBERS   = ['01','02','03','04'];
+const LETTERS_ALL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+// range padrão: A→D, 1→3  (controlado por estado no componente)
 type Direction  = 'right' | 'left' | 'up' | 'down';
 const DIR_LABEL: Record<Direction, string> = { right:'→', left:'←', up:'↑', down:'↓' };
 const DIR_ORDER: Direction[] = ['right','left','up','down'];
@@ -49,6 +49,13 @@ interface Props {
     pageNumber: number;
     onConfirm: (arrows: PlacedArrowResult[]) => void;
     onCancel: () => void;
+    storageKey?: string;
+}
+
+interface SavedSetasState {
+    arrows: PlacedArrowResult[];
+    arrowSizeMm: number;
+    fontSizePt: number;
 }
 
 export function generateArrowSvg(code: string, direction: Direction, fontSizePt = 18): string {
@@ -60,32 +67,32 @@ export function generateArrowSvg(code: string, direction: Direction, fontSizePt 
 
     if (direction === 'right') {
         pathD = `M0,${WING} L${BODY_L},${WING} L${BODY_L},0 L${TOTAL_L},${TIP} L${BODY_L},${TOTAL_W} L${BODY_L},${WING+BODY_W} L0,${WING+BODY_W} Z`;
-        tx = BODY_L / 2; ty = TIP;
+        tx = BODY_L / 2 + 1.5; ty = TIP; // leve offset em direção à ponta (frente)
     } else if (direction === 'left') {
         pathD = `M${TOTAL_L},${WING} L${HEAD_D},${WING} L${HEAD_D},0 L0,${TIP} L${HEAD_D},${TOTAL_W} L${HEAD_D},${WING+BODY_W} L${TOTAL_L},${WING+BODY_W} Z`;
-        tx = HEAD_D + BODY_L / 2; ty = TIP;
+        tx = HEAD_D + BODY_L / 2 - 1.5; ty = TIP; // leve offset em direção à ponta (frente)
     } else if (direction === 'down') {
         pathD = `M${WING},0 L${WING},${BODY_L} L0,${BODY_L} L${TIP},${TOTAL_L} L${TOTAL_W},${BODY_L} L${WING+BODY_W},${BODY_L} L${WING+BODY_W},0 Z`;
-        tx = TIP; ty = BODY_L / 2;
+        tx = TIP; ty = BODY_L / 2 + 1.5; // leve offset em direção à ponta (frente)
         rot = `rotate(90,${tx},${ty})`;
     } else {
         pathD = `M${WING+BODY_W},${TOTAL_L} L${WING+BODY_W},${HEAD_D} L${TOTAL_W},${HEAD_D} L${TIP},0 L0,${HEAD_D} L${WING},${HEAD_D} L${WING},${TOTAL_L} Z`;
-        tx = TIP; ty = HEAD_D + BODY_L / 2;
+        tx = TIP; ty = HEAD_D + BODY_L / 2 - 1.5; // leve offset em direção à ponta (frente)
         rot = `rotate(-90,${tx},${ty})`;
     }
 
     const fsNum = (fontSizePt / 18) * BODY_W * 0.85;
     const fs = fsNum.toFixed(2);
     // Impede que o texto saia pelo lado traseiro — overflow só pela frente (ponta)
-    const halfW = code.length * fsNum * 0.31;
-    const bm = 0.8; // back-margin em unidades viewBox
-    if (direction === 'right')      tx = Math.max(tx, halfW + bm);
-    else if (direction === 'left')  tx = Math.min(tx, TOTAL_L - halfW - bm);
-    else if (direction === 'down')  ty = Math.max(ty, halfW + bm);
-    else                            ty = Math.min(ty, TOTAL_L - halfW - bm);
+    const ls = 0.4; // letter-spacing aplicado no SVG
+    const halfW = code.length * fsNum * 0.31 + (code.length - 1) * ls / 2;
+    const bm = 0.8; // back-margin em unidades viewBox (só horizontal)
+    // UP/DOWN: centralizado no corpo — overflow insignificante (~0.36u) clipado pelo SVG
+    if (direction === 'right')     tx = Math.max(tx, halfW + bm);
+    else if (direction === 'left') tx = Math.min(tx, TOTAL_L - halfW - bm);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vw} ${vh}">
 <path d="${pathD}" fill="${ARROW_COLOR}"/>
-<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-weight="bold" font-size="${fs}" fill="#E6E6E6"${rot ? ` transform="${rot}"` : ''}>${code}</text>
+<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-weight="bold" font-size="${fs}" fill="#E6E6E6" letter-spacing="0.4"${rot ? ` transform="${rot}"` : ''}>${code}</text>
 </svg>`;
 }
 
@@ -163,30 +170,29 @@ export function drawArrowToDoc(doc: any, arrow: PlacedArrowResult): void {
     // Texto centralizado no corpo
     let tx: number, ty: number, angle = 0;
     if (direction === 'right') {
-        tx = x + (BODY_L / 2) * sx; ty = y + TIP * sy;
+        tx = x + (BODY_L / 2 + 1.5) * sx; ty = y + TIP * sy; // leve offset em direção à ponta
     } else if (direction === 'left') {
-        tx = x + (HEAD_D + BODY_L / 2) * sx; ty = y + TIP * sy;
+        tx = x + (HEAD_D + BODY_L / 2 - 1.5) * sx; ty = y + TIP * sy; // leve offset em direção à ponta
     } else if (direction === 'down') {
-        tx = x + TIP * sx; ty = y + (BODY_L / 2) * sy; angle = -90;
+        tx = x + TIP * sx; ty = y + (BODY_L / 2 + 1.5) * sy; angle = -90; // leve offset em direção à ponta
     } else {
-        tx = x + TIP * sx; ty = y + (HEAD_D + BODY_L / 2) * sy; angle = 90;
+        tx = x + TIP * sx; ty = y + (HEAD_D + BODY_L / 2 - 1.5) * sy; angle = 90; // leve offset em direção à ponta
     }
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(fontSizePt);
     // Impede que o texto saia pelo lado traseiro — overflow só pela frente (ponta)
     const halfW = doc.getTextWidth(code) / 2;
-    const bm = 0.8; // back-margin em mm
-    if (direction === 'right')      tx = Math.max(tx, x + halfW + bm);
-    else if (direction === 'left')  tx = Math.min(tx, x + TOTAL_L * sx - halfW - bm);
-    else if (direction === 'down')  ty = Math.max(ty, y + halfW + bm);
-    else                            ty = Math.min(ty, y + TOTAL_L * sy - halfW - bm);
+    const bm = 0.8; // back-margin em mm (só horizontal)
+    // UP/DOWN: centralizado no corpo — pequeno overflow (~0.26mm) invisível no PDF
+    if (direction === 'right')     tx = Math.max(tx, x + halfW + bm);
+    else if (direction === 'left') tx = Math.min(tx, x + TOTAL_L * sx - halfW - bm);
     doc.setTextColor(230, 230, 230); // #E6E6E6
     doc.text(code, tx, ty, { align: 'center', baseline: 'middle', angle });
     doc.setTextColor(0, 0, 0); // restaura cor padrão
 }
 
-export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, onCancel }: Props) {
+export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, onCancel, storageKey }: Props) {
     const canvasRef    = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [canvasDims, setCanvasDims]     = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -195,15 +201,63 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     const [placedArrows, setPlacedArrows] = useState<PlacedArrow[]>([]);
     const [arrowSizeMm, setArrowSizeMm]   = useState(15);
     const [fontSizePt, setFontSizePt]     = useState(18);
+    const [maxLetterIdx, setMaxLetterIdx] = useState(3);  // padrão D (índice 3)
+    const [maxNumber, setMaxNumber]       = useState(3);  // padrão 3 unidades por letra
+    const [zoom, setZoom]                 = useState(1.0);
 
     const arrowSizeMmRef  = useRef(15);
     const canvasDimsRef   = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
     const placedArrowsRef = useRef<PlacedArrow[]>([]);
     const fontSizePtRef   = useRef(18);
+    const zoomRef         = useRef(1.0);
+    const hasRestoredRef  = useRef(false); // guard para restaurar só uma vez por sessão
     useEffect(() => { arrowSizeMmRef.current  = arrowSizeMm;  }, [arrowSizeMm]);
     useEffect(() => { canvasDimsRef.current   = canvasDims;   }, [canvasDims]);
     useEffect(() => { placedArrowsRef.current = placedArrows; }, [placedArrows]);
     useEffect(() => { fontSizePtRef.current   = fontSizePt;   }, [fontSizePt]);
+    useEffect(() => { zoomRef.current         = zoom;         }, [zoom]);
+
+    // Restaura placement salvo quando o canvas estiver pronto
+    useEffect(() => {
+        if (!storageKey || !canvasDims.w || hasRestoredRef.current) return;
+        hasRestoredRef.current = true;
+        try {
+            const raw = localStorage.getItem(storageKey);
+            if (!raw) return;
+            const saved: SavedSetasState = JSON.parse(raw);
+            if (!Array.isArray(saved.arrows) || saved.arrows.length === 0) return;
+            // Converte coords mm → px no canvas atual
+            const restored: PlacedArrow[] = saved.arrows.map(r => ({
+                id:        crypto.randomUUID(),
+                code:      r.code,
+                direction: r.direction,
+                cx: (r.x + r.w / 2) / PAGE_W_MM * canvasDims.w,
+                cy: (r.y + r.h / 2) / PAGE_H_MM * canvasDims.h,
+            }));
+            setPlacedArrows(restored);
+            if (typeof saved.arrowSizeMm === 'number') setArrowSizeMm(saved.arrowSizeMm);
+            if (typeof saved.fontSizePt  === 'number') setFontSizePt(saved.fontSizePt);
+        } catch {
+            // JSON inválido — ignora silenciosamente
+        }
+    }, [storageKey, canvasDims.w]);
+
+    // Última seta clicada — recebe foco para ajuste fino por teclado
+    const selectedArrowId = useRef<string | null>(null);
+
+    // Scroll container ref — para registrar listener de wheel com passive:false
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        function onWheel(e: WheelEvent) {
+            e.preventDefault();
+            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            setZoom(v => Math.min(4, Math.max(0.3, v * factor)));
+        }
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+    }, []);
 
     // Refs para drag sem estado — zero re-renders durante o arrastar
     const dragState = useRef<{
@@ -217,11 +271,13 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     // Mapa de id → elemento DOM das setas no canvas (para mover direto sem setState)
     const arrowElemsRef = useRef<Map<string, HTMLImageElement>>(new Map());
 
-    // Paleta: 192 SVGs memoizados — fonte fixa 18pt (independente do slider; slider afeta só PDF)
+    // Paleta: SVGs memoizados — fonte fixa 18pt; recalcula só quando muda o range
     const paletteSrcs = useMemo<Record<string, string>>(() => {
         const map: Record<string, string> = {};
-        for (const letter of LETTERS) {
-            for (const num of NUMBERS) {
+        const letters = LETTERS_ALL.slice(0, maxLetterIdx + 1);
+        const numbers = Array.from({ length: maxNumber }, (_, i) => String(i + 1).padStart(2, '0'));
+        for (const letter of letters) {
+            for (const num of numbers) {
                 const code = `${letter}${num}`;
                 for (const dir of DIR_ORDER) {
                     map[`${code}|${dir}`] = svgToDataUrl(generateArrowSvg(code, dir, 18));
@@ -229,7 +285,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
             }
         }
         return map;
-    }, []);
+    }, [maxLetterIdx, maxNumber]);
 
     // Renderiza a página PDF no canvas
     useEffect(() => {
@@ -242,7 +298,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 const pdf     = await pdfjsLib.getDocument({ data: buffer }).promise;
                 const pageIdx = Math.min(Math.max(1, pageNumber), pdf.numPages);
                 const page    = await pdf.getPage(pageIdx);
-                const TARGET_W = 700;
+                const TARGET_W = 1400;
                 const vp0      = page.getViewport({ scale: 1 });
                 const scale    = TARGET_W / vp0.width;
                 const viewport = page.getViewport({ scale });
@@ -254,6 +310,11 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
                 if (cancelled) return;
                 setCanvasDims({ w: canvas.width, h: canvas.height });
+                // Auto-fit: zoom inicial para caber no container sem crop
+                if (scrollContainerRef.current) {
+                    const availW = scrollContainerRef.current.clientWidth - 32; // p-4 cada lado
+                    setZoom(Math.min(1, availW / canvas.width));
+                }
             } catch (e: any) {
                 if (!cancelled) setErrorPdf(`Erro ao carregar página: ${e.message}`);
             } finally {
@@ -284,8 +345,9 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     useEffect(() => {
         function onMouseMove(e: MouseEvent) {
             if (!dragState.current) return;
-            const dx = e.clientX - dragState.current.startMouseX;
-            const dy = e.clientY - dragState.current.startMouseY;
+            const z  = zoomRef.current;
+            const dx = (e.clientX - dragState.current.startMouseX) / z;
+            const dy = (e.clientY - dragState.current.startMouseY) / z;
             const newCx = dragState.current.startCx + dx;
             const newCy = dragState.current.startCy + dy;
             dragLivePos.current = { cx: newCx, cy: newCy };
@@ -328,24 +390,57 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
         };
     }, []);
 
+    // Ajuste fino por teclado — seta = 1px, Shift+seta = 10px
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            if (!selectedArrowId.current) return;
+            const MAP: Record<string, [number, number]> = {
+                ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+            };
+            const delta = MAP[e.key];
+            if (!delta) return;
+            e.preventDefault();
+            const step = e.shiftKey ? 10 : 1;
+            const id = selectedArrowId.current;
+            const [dx, dy] = [delta[0] * step, delta[1] * step];
+            // Atualiza DOM imediatamente (mesma abordagem do drag)
+            const arrow = placedArrowsRef.current.find(a => a.id === id);
+            if (arrow) {
+                const dims = arrowPxDims(arrow.direction);
+                const elem = arrowElemsRef.current.get(id);
+                if (elem) {
+                    elem.style.left = `${arrow.cx + dx - dims.w / 2}px`;
+                    elem.style.top  = `${arrow.cy + dy - dims.h / 2}px`;
+                }
+            }
+            setPlacedArrows(prev => prev.map(a => a.id === id ? { ...a, cx: a.cx + dx, cy: a.cy + dy } : a));
+        }
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, []);
+
     function handleCanvasDrop(e: React.DragEvent) {
         e.preventDefault();
         const raw = e.dataTransfer.getData('application/seta');
         if (!raw || !containerRef.current) return;
         const { code, direction } = JSON.parse(raw) as { code: string; direction: Direction };
         const rect = containerRef.current.getBoundingClientRect();
+        const z = zoomRef.current;
+        const newId = crypto.randomUUID();
+        selectedArrowId.current = newId; // seta recém-arrastada já fica selecionada
         setPlacedArrows(prev => [...prev, {
-            id: crypto.randomUUID(),
+            id: newId,
             code,
             direction,
-            cx: e.clientX - rect.left,
-            cy: e.clientY - rect.top,
+            cx: (e.clientX - rect.left) / z,
+            cy: (e.clientY - rect.top)  / z,
         }]);
     }
 
     function handleArrowMouseDown(e: React.MouseEvent, arrow: PlacedArrow) {
         e.preventDefault();
         e.stopPropagation();
+        selectedArrowId.current = arrow.id; // ativa ajuste fino por teclado
         dragState.current = {
             arrowId:     arrow.id,
             direction:   arrow.direction,
@@ -374,6 +469,15 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 fontSizePt: fontSizePtRef.current,
             });
         }
+        // Persiste para restaurar na próxima abertura (mesma pasta)
+        if (storageKey) {
+            const saved: SavedSetasState = {
+                arrows:      results,
+                arrowSizeMm: arrowSizeMmRef.current,
+                fontSizePt:  fontSizePtRef.current,
+            };
+            try { localStorage.setItem(storageKey, JSON.stringify(saved)); } catch { /* quota excedida */ }
+        }
         onConfirm(results);
     }
 
@@ -400,7 +504,30 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 <button onClick={() => setFontSizePt(v => Math.min(48, v + 1))}
                     className="w-6 h-6 rounded bg-gray-600 text-white text-sm hover:bg-gray-500 flex items-center justify-center">+</button>
 
+                <div className="w-px h-4 bg-gray-600 mx-1" />
+
+                <span className="text-gray-400 text-xs">Letra:</span>
+                <button onClick={() => setMaxLetterIdx(v => Math.max(0, v - 1))}
+                    className="w-6 h-6 rounded bg-gray-600 text-white text-sm hover:bg-gray-500 flex items-center justify-center">−</button>
+                <span className="text-gray-300 text-xs font-mono tabular-nums w-4 text-center">{LETTERS_ALL[maxLetterIdx]}</span>
+                <button onClick={() => setMaxLetterIdx(v => Math.min(25, v + 1))}
+                    className="w-6 h-6 rounded bg-gray-600 text-white text-sm hover:bg-gray-500 flex items-center justify-center">+</button>
+
+                <div className="w-px h-4 bg-gray-600 mx-1" />
+
+                <span className="text-gray-400 text-xs">Qtd:</span>
+                <button onClick={() => setMaxNumber(v => Math.max(1, v - 1))}
+                    className="w-6 h-6 rounded bg-gray-600 text-white text-sm hover:bg-gray-500 flex items-center justify-center">−</button>
+                <span className="text-gray-300 text-xs font-mono tabular-nums w-4 text-center">{maxNumber}</span>
+                <button onClick={() => setMaxNumber(v => Math.min(9, v + 1))}
+                    className="w-6 h-6 rounded bg-gray-600 text-white text-sm hover:bg-gray-500 flex items-center justify-center">+</button>
+
                 <div className="flex-1" />
+                <div className="w-px h-4 bg-gray-600 mx-1" />
+                <span className="text-gray-400 text-xs">Zoom:</span>
+                <span className="text-gray-300 text-xs font-mono tabular-nums w-10 text-center">{Math.round(zoom * 100)}%</span>
+                <button onClick={() => setZoom(1)}
+                    className="text-xs text-gray-400 hover:text-white px-1" title="Resetar zoom">↺</button>
                 <button onClick={onCancel}
                     className="px-4 py-1.5 rounded text-sm font-semibold bg-gray-600 text-white hover:bg-gray-500 transition-colors">Cancelar</button>
                 <button onClick={handleConfirm} disabled={loadingPdf}
@@ -412,10 +539,10 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
 
                 {/* Paleta */}
                 <div className="w-52 shrink-0 bg-gray-800 border-r border-gray-700 overflow-y-auto py-1">
-                    {LETTERS.map(letter => (
+                    {LETTERS_ALL.slice(0, maxLetterIdx + 1).map(letter => (
                         <div key={letter} className="border-b border-gray-700 last:border-0">
                             <div className="px-2 py-0.5 text-[10px] font-bold text-gray-400 sticky top-0 bg-gray-800 z-10">{letter}</div>
-                            {NUMBERS.map(num => {
+                            {Array.from({ length: maxNumber }, (_, i) => String(i + 1).padStart(2, '0')).map(num => {
                                 const code = `${letter}${num}`;
                                 return (
                                     <div key={code} className="flex items-center gap-1 px-2 py-0.5">
@@ -450,11 +577,18 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
 
                 {/* Canvas */}
                 <div
-                    className="flex-1 overflow-auto bg-gray-600 flex items-start justify-center p-4"
+                    ref={scrollContainerRef}
+                    className="flex-1 overflow-auto bg-gray-600 flex items-center justify-center p-4"
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleCanvasDrop}
                     style={{ position: 'relative' }}
                 >
+                    {/* Wrapper colapsa o espaço de layout com o zoom — transform sozinho não faz isso */}
+                    <div style={{
+                        flexShrink: 0,
+                        width:  canvasDims.w ? canvasDims.w * zoom : undefined,
+                        height: canvasDims.h ? canvasDims.h * zoom : undefined,
+                    }}>
                     <div
                         ref={containerRef}
                         style={{
@@ -463,6 +597,8 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                             boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
                             visibility: (loadingPdf || errorPdf) ? 'hidden' : 'visible',
                             overflow: 'hidden',
+                            transform: `scale(${zoom})`,
+                            transformOrigin: 'top left',
                         }}
                     >
                         <canvas ref={canvasRef} style={{ display: 'block' }} />
@@ -493,6 +629,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                             );
                         })}
                     </div>
+                    </div>{/* fim wrapper layout */}
 
                     {loadingPdf && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-300">
