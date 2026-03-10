@@ -1531,7 +1531,7 @@ export default function GerarPdfPage({ onGoToNova, autoGenerate, onComplete, for
                 doc.setPage(setasPdfPageNum ?? setasPaginaNum);
                 for (const arrow of arrows) {
                     try {
-                        drawArrowToDoc(doc, arrow); // vetor direto — sem fundo branco
+                        await drawArrowToDoc(doc, arrow);
                     } catch (e) {
                         console.warn('[setas] erro ao aplicar seta:', e);
                     }

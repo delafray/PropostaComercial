@@ -102,95 +102,28 @@ function svgToDataUrl(svg: string): string {
 }
 
 /**
- * Desenha uma seta diretamente como vetorial no jsPDF.
- * Sem rasterização — sem fundo branco. Usa polígono + text() do jsPDF.
- * @param doc  instância jsPDF (any para não criar dependência de tipo)
+ * Renderiza a seta como PNG transparente (mesmo SVG do modal) e insere no jsPDF.
+ * Idêntico ao que o usuário viu na tela de composição — sem divergência de posição de texto.
  */
-export function drawArrowToDoc(doc: any, arrow: PlacedArrowResult): void {
+export function drawArrowToDoc(doc: any, arrow: PlacedArrowResult): Promise<void> {
     const { x, y, w, h, direction, code, fontSizePt } = arrow;
-
-    const isH = direction === 'left' || direction === 'right';
-    // Para horizontal: viewBox = TOTAL_L × TOTAL_W; vertical: TOTAL_W × TOTAL_L
-    const sx = w / (isH ? TOTAL_L : TOTAL_W); // mm por unidade viewBox (eixo x)
-    const sy = h / (isH ? TOTAL_W : TOTAL_L); // mm por unidade viewBox (eixo y)
-
-    // Pontos do polígono em mm (mesma lógica do generateArrowSvg)
-    let pts: [number, number][];
-    if (direction === 'right') {
-        pts = [
-            [x,                   y + WING * sy],
-            [x + BODY_L * sx,     y + WING * sy],
-            [x + BODY_L * sx,     y],
-            [x + TOTAL_L * sx,    y + TIP * sy],
-            [x + BODY_L * sx,     y + TOTAL_W * sy],
-            [x + BODY_L * sx,     y + (WING + BODY_W) * sy],
-            [x,                   y + (WING + BODY_W) * sy],
-        ];
-    } else if (direction === 'left') {
-        pts = [
-            [x + TOTAL_L * sx,    y + WING * sy],
-            [x + HEAD_D * sx,     y + WING * sy],
-            [x + HEAD_D * sx,     y],
-            [x,                   y + TIP * sy],
-            [x + HEAD_D * sx,     y + TOTAL_W * sy],
-            [x + HEAD_D * sx,     y + (WING + BODY_W) * sy],
-            [x + TOTAL_L * sx,    y + (WING + BODY_W) * sy],
-        ];
-    } else if (direction === 'down') {
-        pts = [
-            [x + WING * sx,           y],
-            [x + WING * sx,           y + BODY_L * sy],
-            [x,                       y + BODY_L * sy],
-            [x + TIP * sx,            y + TOTAL_L * sy],
-            [x + TOTAL_W * sx,        y + BODY_L * sy],
-            [x + (WING + BODY_W) * sx, y + BODY_L * sy],
-            [x + (WING + BODY_W) * sx, y],
-        ];
-    } else { // up
-        pts = [
-            [x + (WING + BODY_W) * sx, y + TOTAL_L * sy],
-            [x + (WING + BODY_W) * sx, y + HEAD_D * sy],
-            [x + TOTAL_W * sx,         y + HEAD_D * sy],
-            [x + TIP * sx,             y],
-            [x,                        y + HEAD_D * sy],
-            [x + WING * sx,            y + HEAD_D * sy],
-            [x + WING * sx,            y + TOTAL_L * sy],
-        ];
-    }
-
-    // Movimentos relativos para jsPDF.lines()
-    const lines: [number, number][] = [];
-    for (let i = 1; i < pts.length; i++) {
-        lines.push([pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]]);
-    }
-
-    // Preenche polígono
-    doc.setFillColor(168, 81, 138); // #A8518A
-    doc.lines(lines, pts[0][0], pts[0][1], [1, 1], 'F', true);
-
-    // Texto centralizado no corpo
-    let tx: number, ty: number, angle = 0;
-    if (direction === 'right') {
-        tx = x + (BODY_L / 2 + 1.5) * sx; ty = y + TIP * sy; // leve offset em direção à ponta
-    } else if (direction === 'left') {
-        tx = x + (HEAD_D + BODY_L / 2 - 1.5) * sx; ty = y + TIP * sy; // leve offset em direção à ponta
-    } else if (direction === 'down') {
-        tx = x + TIP * sx; ty = y + (BODY_L / 2 + 1.5) * sy; angle = -90; // leve offset em direção à ponta
-    } else {
-        tx = x + TIP * sx; ty = y + (HEAD_D + BODY_L / 2 - 1.5) * sy; angle = 90; // leve offset em direção à ponta
-    }
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(fontSizePt);
-    // Impede que o texto saia pelo lado traseiro — overflow só pela frente (ponta)
-    const halfW = doc.getTextWidth(code) / 2;
-    const bm = 0.8; // back-margin em mm (só horizontal)
-    // UP/DOWN: centralizado no corpo — pequeno overflow (~0.26mm) invisível no PDF
-    if (direction === 'right')     tx = Math.max(tx, x + halfW + bm);
-    else if (direction === 'left') tx = Math.min(tx, x + TOTAL_L * sx - halfW - bm);
-    doc.setTextColor(230, 230, 230); // #E6E6E6
-    doc.text(code, tx, ty, { align: 'center', baseline: 'middle', angle });
-    doc.setTextColor(0, 0, 0); // restaura cor padrão
+    return new Promise((resolve, reject) => {
+        const svg = generateArrowSvg(code, direction, fontSizePt);
+        const PX_PER_MM = 10; // ~250 dpi equivalente no PDF
+        const pxW = Math.max(1, Math.round(w * PX_PER_MM));
+        const pxH = Math.max(1, Math.round(h * PX_PER_MM));
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width  = pxW;
+            canvas.height = pxH;
+            canvas.getContext('2d')!.drawImage(img, 0, 0, pxW, pxH);
+            doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, w, h);
+            resolve();
+        };
+        img.onerror = reject;
+        img.src = svgToDataUrl(svg);
+    });
 }
 
 export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, onCancel, storageKey, fileNameHint }: Props) {
@@ -688,9 +621,12 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 <button onClick={() => setZoom(1)}
                     className="text-xs text-gray-400 hover:text-white px-1" title="Resetar zoom">↺</button>
                 <button onClick={onCancel}
-                    className="px-4 py-1.5 rounded text-sm font-semibold bg-gray-600 text-white hover:bg-gray-500 transition-colors">Cancelar</button>
+                    className="px-3 py-1 rounded text-xs bg-gray-600 text-white hover:bg-gray-500 transition-colors">Cancelar</button>
+                <button onClick={onCancel}
+                    title="Pular posicionamento de setas e continuar gerando o PDF"
+                    className="px-3 py-1 rounded text-xs bg-amber-700 text-white hover:bg-amber-600 transition-colors">Pular</button>
                 <button onClick={handleConfirm} disabled={loadingPdf}
-                    className="px-5 py-1.5 rounded text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors">✓ Confirmar</button>
+                    className="px-3 py-1 rounded text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 transition-colors">Confirmar</button>
             </div>
 
             {/* Body */}
