@@ -281,8 +281,8 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
             if (!panState.current) return;
             const el = scrollContainerRef.current;
             if (!el) return;
-            el.scrollLeft = panState.current.scrollLeft + (e.clientX - panState.current.startX);
-            el.scrollTop  = panState.current.scrollTop  + (e.clientY - panState.current.startY);
+            el.scrollLeft = panState.current.scrollLeft - (e.clientX - panState.current.startX);
+            el.scrollTop  = panState.current.scrollTop  - (e.clientY - panState.current.startY);
         }
         function onMouseUp(e: MouseEvent) {
             if (e.button !== 2) return;
