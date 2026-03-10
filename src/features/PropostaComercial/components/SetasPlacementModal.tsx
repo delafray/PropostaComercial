@@ -212,6 +212,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
     const fontSizePtRef   = useRef(18);
     const zoomRef         = useRef(1.0);
     const hasRestoredRef  = useRef(false); // guard para restaurar só uma vez por sessão
+    const hasCenteredRef  = useRef(false); // guard para centralizar scroll só na primeira carga
     const fileInputRef    = useRef<HTMLInputElement>(null);
     const panState        = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
     useEffect(() => { arrowSizeMmRef.current  = arrowSizeMm;  }, [arrowSizeMm]);
@@ -244,6 +245,18 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
             // JSON inválido — ignora silenciosamente
         }
     }, [storageKey, canvasDims.w]);
+
+    // Centraliza o scroll quando o PDF carrega pela primeira vez
+    useEffect(() => {
+        if (!canvasDims.w || hasCenteredRef.current) return;
+        hasCenteredRef.current = true;
+        requestAnimationFrame(() => {
+            const el = scrollContainerRef.current;
+            if (!el) return;
+            el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+            el.scrollTop  = (el.scrollHeight - el.clientHeight) / 2;
+        });
+    }, [canvasDims.w]);
 
     // Última seta clicada — recebe foco para ajuste fino por teclado
     const selectedArrowId = useRef<string | null>(null);
@@ -337,7 +350,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 setCanvasDims({ w: canvas.width, h: canvas.height });
                 // Auto-fit: zoom inicial para caber no container sem crop
                 if (scrollContainerRef.current) {
-                    const availW = scrollContainerRef.current.clientWidth - 32; // p-4 cada lado
+                    const availW = scrollContainerRef.current.clientWidth - 40;
                     setZoom(Math.min(1, availW / canvas.width));
                 }
             } catch (e: any) {
@@ -678,7 +691,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                 {/* Canvas */}
                 <div
                     ref={scrollContainerRef}
-                    className="flex-1 overflow-auto bg-gray-600 flex items-center justify-center p-4"
+                    className="flex-1 overflow-auto bg-gray-600"
                     onDragOver={e => e.preventDefault()}
                     onDrop={handleCanvasDrop}
                     onContextMenu={e => e.preventDefault()}
@@ -691,6 +704,14 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                     }}
                     style={{ position: 'relative' }}
                 >
+                    {/* Stage — garante espaço de scroll em todas as direções (pan livre) */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth:  canvasDims.w ? canvasDims.w * zoom + 600 : '100%',
+                        minHeight: canvasDims.h ? canvasDims.h * zoom + 600 : '100%',
+                    }}>
                     {/* Wrapper colapsa o espaço de layout com o zoom — transform sozinho não faz isso */}
                     <div style={{
                         flexShrink: 0,
@@ -738,6 +759,7 @@ export default function SetasPlacementModal({ pdfBlob, pageNumber, onConfirm, on
                         })}
                     </div>
                     </div>{/* fim wrapper layout */}
+                    </div>{/* fim stage */}
 
                     {loadingPdf && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-300">
