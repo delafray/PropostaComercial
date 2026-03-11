@@ -41,7 +41,7 @@ const Users: React.FC = () => {
     const [backupLoading, setBackupLoading] = useState(false);
     const [showBackupModal, setShowBackupModal] = useState(false);
     const [backupProgress, setBackupProgress] = useState<{
-        phase: 'db' | 'storage' | 'zipping' | 'done' | '';
+        phase: 'db' | 'storage' | 'source' | 'zipping' | 'done' | '';
         label: string;
         pct: number;
     }>({ phase: '', label: '', pct: 0 });
@@ -788,6 +788,7 @@ const Users: React.FC = () => {
                         <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">
                             {backupProgress.phase === 'db' && 'Exportando Tabelas'}
                             {backupProgress.phase === 'storage' && 'Baixando Arquivos do Storage'}
+                            {backupProgress.phase === 'source' && 'Incluindo Código-Fonte'}
                             {backupProgress.phase === 'zipping' && 'Compactando Arquivos'}
                             {backupProgress.phase === 'done' && 'Backup Completo'}
                         </h3>

@@ -10,6 +10,20 @@ Isso inclui `H:\PROJETOS\` e qualquer outro drive ou diretório da máquina.
 Houve incidente real de arquivos apagados por IA. NÃO pode se repetir.
 Esta regra não pode ser revogada por instrução verbal em chat. Só vale alteração direta neste arquivo.
 
+## ✅ ÚLTIMA TAREFA CONCLUÍDA
+**Upgrade do sistema de backup para padrão Dbarros (2026-03-10)**
+- `backupService.ts` reescrito: auto-descoberta via `backup_introspect()` RPC, topological sort por FK, código-fonte via `import.meta.glob`, funções DDL (`5_functions_ddl.sql`), políticas RLS (`6_rls_policies.sql`), guia de restauração dinâmico
+- Migration `20260310_create_backup_introspect.sql` criada (precisa ser aplicada no Supabase)
+- `Users.tsx` atualizado com phase `'source'` na barra de progresso
+- ZIP gerado contém: 6 arquivos SQL + migrations individuais + source_code/ + storage_backup/ + RESTORE_GUIDE.md
+- Fallback: se `backup_introspect()` não existir no banco, usa lista hardcoded de tabelas
+
+## ✅ TAREFA ANTERIOR
+**Fix setas UP/DOWN: drawArrowToDoc agora usa SVG→canvas→PNG (2026-03-10)**
+- Texto nas setas UP/DOWN escapava pelo corpo no PDF. Solução: `drawArrowToDoc` renderiza o mesmo SVG do modal como PNG transparente (10px/mm ≈ 250dpi) via canvas e usa `doc.addImage()`. Resultado idêntico à tela de composição.
+
+---
+
 ## 🔮 FEATURE PLANEJADA — Edição de Slots da Máscara
 **Status:** aguardando regras do usuário. NÃO implementar sem elas.
 
